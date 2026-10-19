@@ -327,6 +327,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <button class="tb fill" id="save"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>Salvar</button>
     <button class="tb" id="toolsBtn"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>Ferramentas <svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
     <div class="tbgroup">
+      <button class="tb" data-tool="pan" title="Mão: arrastar a planta"><svg class="ic" viewBox="0 0 24 24"><path d="M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5a1.5 1.5 0 0 1 3 0v8M17 13a1.5 1.5 0 0 1 3 0v3a6 6 0 0 1-6 6h-2a6 6 0 0 1-5-2.7L4 15a1.5 1.5 0 0 1 2.5-1.6L8 15"/></svg></button>
       <button class="tb" data-tool="measure" title="Medir"><svg class="ic" viewBox="0 0 24 24"><path d="M3 17l14-14 4 4L7 21z"/><path d="M8 8l2 2M11 5l2 2M14 11l2 2M5 11l2 2"/></svg></button>
       <button class="tb" data-tool="text" title="Texto"><svg class="ic" viewBox="0 0 24 24"><path d="M5 5h14M12 5v14M9 19h6"/></svg></button>
       <button class="tb" data-tool="select" title="Selecionar / mover"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -410,7 +411,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <span class="sp"></span>
     <span id="stCursor">x 0 · y 0</span>
     <span id="stInfo"></span>
-    <span style="color:var(--ink3)" title="Versão do ficheiro">v11</span>
+    <span style="color:var(--ink3)" title="Versão do ficheiro">v12</span>
   </div>
 
   <div class="menu" id="toolsMenu">
@@ -666,7 +667,12 @@ function svcSummary(f){ const out={}; for(const k in SVC)out[k]={pts:0,len:0}; f
 /* ---------- interação 2D ---------- */
 let panning=null, spaceDown=false;
 cv.addEventListener('contextmenu',e=>e.preventDefault());
-cv.addEventListener('wheel',e=>{ e.preventDefault(); const [wx,wy]=toWld(e.offsetX,e.offsetY); const k=Math.exp(-e.deltaY*0.0015); cam.z=Math.max(.15,Math.min(8,cam.z*k)); cam.x=wx-e.offsetX/cam.z; cam.y=wy-e.offsetY/cam.z; draw(); },{passive:false});
+cv.addEventListener('wheel',e=>{ e.preventDefault();
+  if(e.ctrlKey||e.metaKey){ // zoom (Ctrl/Cmd + roda, ou pinça no trackpad)
+    const [wx,wy]=toWld(e.offsetX,e.offsetY); const k=Math.exp(-e.deltaY*0.01); cam.z=Math.max(.15,Math.min(8,cam.z*k)); cam.x=wx-e.offsetX/cam.z; cam.y=wy-e.offsetY/cam.z; }
+  else { // rolar desloca a planta (Shift + roda desloca na horizontal)
+    const dx=e.shiftKey&&!e.deltaX?e.deltaY:e.deltaX, dy=e.shiftKey&&!e.deltaX?0:e.deltaY; cam.x+=dx/cam.z; cam.y+=dy/cam.z; }
+  draw(); },{passive:false});
 cv.addEventListener('pointerdown',e=>{
   cv.setPointerCapture(e.pointerId);
   const [x,y]=toWld(e.offsetX,e.offsetY);
@@ -806,15 +812,18 @@ addEventListener('keydown',e=>{
   if(e.key==='Escape'){drag=null;sel=null;showPanel();draw();}
   if(sel&&sel.type==='opening'&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){ e.preventDefault(); const o=sel.obj,w=wallById(o.wall); pushHistory(); o.off=Math.max(0,Math.min(wallLen(w)-o.width,o.off+(e.key==='ArrowRight'?1:-1)*S.settings.wallT)); draw(); showPanel(); }
   if(e.key==='r'&&tool==='furniture'){furnRot=!furnRot;draw();}
-  const keys={p:'wall',d:'door',j:'window',s:'select',m:'measure',t:'text',a:'room'}; if(!e.ctrlKey&&!e.metaKey&&keys[e.key])setTool(keys[e.key]);
+  if(!(sel&&sel.type==='opening')&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){ e.preventDefault(); const st=60/cam.z; if(e.key==='ArrowLeft')cam.x-=st; if(e.key==='ArrowRight')cam.x+=st; if(e.key==='ArrowUp')cam.y-=st; if(e.key==='ArrowDown')cam.y+=st; draw(); }
+  if(e.key==='+'||e.key==='='){ cam.z=Math.min(8,cam.z*1.2); draw(); } if(e.key==='-'){ cam.z=Math.max(.15,cam.z/1.2); draw(); } if(e.key==='0'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); fit(); }
+  const keys={p:'wall',d:'door',j:'window',s:'select',m:'measure',t:'text',a:'room',h:'pan'}; if(!e.ctrlKey&&!e.metaKey&&keys[e.key])setTool(keys[e.key]);
 });
-addEventListener('keyup',e=>{ if(e.code==='Space'){spaceDown=false;cv.style.cursor='crosshair';} });
+addEventListener('keyup',e=>{ if(e.code==='Space'){spaceDown=false;setCursor();} });
 
 /* ---------- ferramentas / vistas ---------- */
-const hints={wall:'Parede: clique e arraste a partir da ponta de outra parede para amarrar o canto. O comprimento ajusta-se para fechar em tijolos inteiros. (P)',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
-function setToolHint(){ $('#hint').textContent=(hints[tool]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; }
-function setTool(t){ tool=t; $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); $('#openSize').classList.toggle('hidden',!(t==='door'||t==='window')); $('#furnPick').classList.toggle('hidden',t!=='furniture'); syncOpenInputs(); $('#hint').textContent=(hints[t]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; if(view!=='plan'&&view!=='services')setView('plan'); draw(); }
+const hints={pan:'Mão (H): arraste para deslocar a planta. Rolar também desloca; Ctrl/Cmd + rolar ou pinça faz zoom.',wall:'Parede: clique e arraste a partir da ponta de outra parede para amarrar o canto. O comprimento ajusta-se para fechar em tijolos inteiros. (P)',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
+function setToolHint(){ $('#hint').textContent=(hints[tool]||'')+'  ·  Rolar: deslocar · Ctrl/Cmd + rolar: zoom · Botão direito ou Espaço + arrastar: deslocar'; }
+function setTool(t){ tool=t; setCursor(); $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); $('#openSize').classList.toggle('hidden',!(t==='door'||t==='window')); $('#furnPick').classList.toggle('hidden',t!=='furniture'); syncOpenInputs(); $('#hint').textContent=(hints[t]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; if(view!=='plan'&&view!=='services')setView('plan'); draw(); }
 $$('[data-tool]').forEach(b=>b.addEventListener('click',()=>{setTool(b.dataset.tool);closeMenus();}));
+function setCursor(){ cv.style.cursor=tool==='pan'?'grab':'crosshair'; }
 function setView(v){ view=v; $$('#views .tb').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
   cv.classList.toggle('hidden',!(v==='plan'||v==='services'));
   $('#three').classList.toggle('hidden',v!=='3d');
@@ -1268,6 +1277,7 @@ const TIPS={
   'data-tool=window':'Janela (J): defina largura, altura e peitoril e clique numa parede. Arraste para mover.',
   'data-tool=furniture':'Mobiliário: arraste um retângulo e dê um nome (cama, mesa, bancada…).',
   'data-tool=room':'Ambientes (A): arraste um retângulo para nomear o cômodo e calcular a área.',
+  'data-tool=pan':'Mão (H): arraste para deslocar a planta. Rolar desloca; Ctrl/Cmd + rolar ou pinça faz zoom; + e − também; Ctrl+0 enquadra.',
   'data-tool=select':'Selecionar (S): clique num elemento para editar as propriedades; arraste para mover; Delete apaga.',
   'data-tool=measure':'Medir (M): arraste entre dois pontos para ler a distância.',
   'data-tool=text':'Texto (T): clique para escrever uma anotação na planta.',
