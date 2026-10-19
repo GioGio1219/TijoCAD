@@ -411,7 +411,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <span class="sp"></span>
     <span id="stCursor">x 0 · y 0</span>
     <span id="stInfo"></span>
-    <span style="color:var(--ink3)" title="Versão do ficheiro">v12</span>
+    <span style="color:var(--ink3)" title="Versão do ficheiro">v13</span>
   </div>
 
   <div class="menu" id="toolsMenu">
@@ -586,6 +586,9 @@ function draw(){
   if(drag&&(drag.kind==='room'||drag.kind==='furniture')){ const [ax,ay]=toScr(Math.min(drag.x1,drag.x2),Math.min(drag.y1,drag.y2)); ctx.strokeStyle=css('--clay'); ctx.setLineDash([5,4]); ctx.strokeRect(ax,ay,Math.abs(drag.x2-drag.x1)*cam.z,Math.abs(drag.y2-drag.y1)*cam.z); ctx.setLineDash([]); }
   // instalações
   if(view==='services') drawServices(f);
+  // medida ao vivo junto ao cursor (entrada dinâmica)
+  if(drag&&drag.kind==='wall'){ const g=ghostWall(drag); const L=wallLen(g); const h=L>=MOD()?halvesOf(g):0; const [mx,my]=toScr(mouse[0],mouse[1]); const txt=cmd?('⌨ '+cmd+'_'):(fmt(L)+' cm'+(h?' · '+h+'×½':'')); label(mx+70,my-18,txt,cmd?css('--clay'):(h?css('--warn'):css('--ink'))); }
+  if((tool==='door'||tool==='window')&&cmd){ const [mx,my]=toScr(mouse[0],mouse[1]); label(mx+70,my-18,'⌨ posição '+cmd+'_ cm',css('--clay')); }
   // cursor
   const [cx,cy]=toScr(snap(mouse[0]),snap(mouse[1]));
   if(tool==='wall'||tool==='room'||tool==='furniture'||tool==='column'){ ctx.strokeStyle=css('--clay'); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(cx-8,cy);ctx.lineTo(cx+8,cy);ctx.moveTo(cx,cy-8);ctx.lineTo(cx,cy+8); ctx.stroke(); }
@@ -665,7 +668,7 @@ function drawServices(f){
 function svcSummary(f){ const out={}; for(const k in SVC)out[k]={pts:0,len:0}; for(const p of f.services)out[p.type].pts++; for(const c of f.conduits){ const a=svcById(c.a),b=svcById(c.b); if(a&&b)out[c.type].len+=Math.hypot(b.x-a.x,b.y-a.y)/100; } return out; }
 
 /* ---------- interação 2D ---------- */
-let panning=null, spaceDown=false;
+let panning=null, spaceDown=false, cmd='', lastDir=[1,0];
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('wheel',e=>{ e.preventDefault();
   if(e.ctrlKey||e.metaKey){ // zoom (Ctrl/Cmd + roda, ou pinça no trackpad)
@@ -686,7 +689,7 @@ cv.addEventListener('pointerdown',e=>{
     const h=prompt('Altura do ponto (cm do piso):',svcTool==='ele'?'110':svcTool==='gas'?'60':'90'); if(h===null)return;
     pushHistory(); F().services.push({id:uid(),type:svcTool,x:px,y:py,h:+h||0}); draw(); return;
   }
-  if(tool==='wall'){ const alts=snapCandidates(sx,sy); drag={kind:'wall',x1:alts[0][0],y1:alts[0][1],x2:alts[0][0],y2:alts[0][1],alts}; }
+  if(tool==='wall'){ if(drag&&drag.kind==='wall'&&drag.sticky){ finishWall(drag); return; } const alts=snapCandidates(sx,sy); drag={kind:'wall',x1:alts[0][0],y1:alts[0][1],x2:alts[0][0],y2:alts[0][1],alts,t0:Date.now()}; cmd=''; setPrompt('Parede: mova e clique no fim, ou digite o comprimento (ex.: 300, @300,0) e Enter · Esc termina'); }
   else if(tool==='measure'){ drag={kind:'measure',x1:x,y1:y,x2:x,y2:y}; }
   else if(tool==='furniture'&&FURN[furnSel][1]){ const f=FURN[furnSel]; const w=furnRot?f[2]:f[1],h=furnRot?f[1]:f[2]; pushHistory(); F().furniture.push({id:uid(),x:sx,y:sy,w,h,name:f[0]}); draw(); }
   else if(tool==='room'||tool==='furniture'){ drag={kind:tool,x1:sx,y1:sy,x2:sx,y2:sy}; }
@@ -704,8 +707,7 @@ cv.addEventListener('pointermove',e=>{
     if(drag.kind==='wall'){ // ortogonal
       const dx=snap(x)-drag.x1, dy=snap(y)-drag.y1;
       if(Math.abs(dx)>=Math.abs(dy)){drag.x2=drag.x1+dx;drag.y2=drag.y1;} else {drag.x2=drag.x1;drag.y2=drag.y1+dy;}
-      fitWholeBricks(drag);
-      const g=ghostWall(drag); const h=halvesOf(g); $('#stInfo').textContent='Comprimento: '+fmt(wallLen(g))+' cm'+(h?' · '+h+' meio(s) tijolo':' · fecha em tijolos inteiros');
+      if(!cmd)fitWholeBricks(drag);
     } else if(drag.kind==='measure'){ drag.x2=x;drag.y2=y; }
     else if(drag.kind==='room'||drag.kind==='furniture'){ drag.x2=snap(x);drag.y2=snap(y); }
     else if(drag.kind==='move'){ moveObj(drag.h,snap(x-drag.ox),snap(y-drag.oy)); }
@@ -719,14 +721,28 @@ cv.addEventListener('pointermove',e=>{
 cv.addEventListener('pointerup',e=>{
   if(panning){panning=null;return;}
   if(!drag)return;
+  if(drag.kind==='wall'){ const L=Math.hypot(drag.x2-drag.x1,drag.y2-drag.y1); if(L<MOD()||Date.now()-drag.t0<250){ drag.sticky=true; return; } finishWall(drag); return; }
   const d=drag; drag=null; $('#stInfo').textContent='';
-  if(d.kind==='wall'){ const L=Math.hypot(d.x2-d.x1,d.y2-d.y1); if(L>=MOD()){ pushHistory(); const g=ghostWall(d); if(!extendCollinear(g)){ F().walls.push({id:uid(),x1:g.x1,y1:g.y1,x2:g.x2,y2:g.y2,side:g.side}); } } }
-  else if(d.kind==='room'){ const w=Math.abs(d.x2-d.x1),h=Math.abs(d.y2-d.y1); if(w>0&&h>0){ const name=prompt('Nome do ambiente:','Sala'); if(name){pushHistory(); F().rooms.push({id:uid(),x:Math.min(d.x1,d.x2),y:Math.min(d.y1,d.y2),w,h,name});} } }
+  if(d.kind==='room'){ const w=Math.abs(d.x2-d.x1),h=Math.abs(d.y2-d.y1); if(w>0&&h>0){ const name=prompt('Nome do ambiente:','Sala'); if(name){pushHistory(); F().rooms.push({id:uid(),x:Math.min(d.x1,d.x2),y:Math.min(d.y1,d.y2),w,h,name});} } }
   else if(d.kind==='furniture'){ const w=Math.abs(d.x2-d.x1),h=Math.abs(d.y2-d.y1); if(w>0&&h>0){ const name=prompt('Nome do móvel:','Cama'); if(name){pushHistory(); F().furniture.push({id:uid(),x:Math.min(d.x1,d.x2),y:Math.min(d.y1,d.y2),w,h,name});} } }
   else if(d.kind==='conduit'){ const p=svcHit(d.x,d.y); if(p&&p.id!==d.from){ const dup=F().conduits.some(c=>(c.a===d.from&&c.b===p.id)||(c.a===p.id&&c.b===d.from)); if(!dup){ pushHistory(); F().conduits.push({id:uid(),type:d.type,a:d.from,b:p.id}); } } }
   else if(d.kind==='move'){ if(JSON.stringify(d.h.obj)!==d.start){ const cur=JSON.stringify(d.h.obj); Object.assign(d.h.obj,JSON.parse(d.start)); pushHistory(); Object.assign(d.h.obj,JSON.parse(cur)); } }
   draw();
 });
+/* termina a parede em desenho; em modo clique-clique encadeia a próxima a partir do fim */
+function finishWall(d){ const L=Math.hypot(d.x2-d.x1,d.y2-d.y1); let g=null;
+  if(L>=MOD()){ pushHistory(); g=ghostWall(d); if(!extendCollinear(g)){ F().walls.push({id:uid(),x1:g.x1,y1:g.y1,x2:g.x2,y2:g.y2,side:g.side}); } lastDir=[Math.sign(g.x2-g.x1),Math.sign(g.y2-g.y1)]; }
+  cmd='';
+  if(d.sticky&&g){ const ex=g.x2,ey=g.y2; drag={kind:'wall',x1:ex,y1:ey,x2:ex,y2:ey,alts:snapCandidates(ex,ey),sticky:true,t0:0}; setPrompt('Parede seguinte a partir do fim · clique ou digite o comprimento · Enter/Esc termina'); }
+  else { drag=null; setPrompt(''); }
+  draw(); }
+function setPrompt(t){ $('#stInfo').textContent=t; }
+/* aplica o valor digitado (comprimento ou @dx,dy) à parede em desenho */
+function applyTyped(d){ const raw=cmd.trim(); const v=raw.replace(',','.'); if(!raw)return false;
+  if(raw.startsWith('@')){ const m=raw.slice(1).match(/^(-?[\d.]+)[,;x|](-?[\d.]+)$/); if(!m){toast('Use @dx,dy (ex.: @300,0)');return false;} const dx=snap(+m[1]),dy=snap(+m[2]); if(Math.abs(dx)>=Math.abs(dy)){d.x2=d.x1+dx;d.y2=d.y1;} else {d.x2=d.x1;d.y2=d.y1+dy;} return true; }
+  const L=snap(Math.abs(+v)); if(!(L>0)){toast('Comprimento inválido.');return false;}
+  let ux=Math.sign(d.x2-d.x1),uy=Math.sign(d.y2-d.y1); if(!ux&&!uy){[ux,uy]=lastDir;} if(ux&&uy){ if(Math.abs(d.x2-d.x1)>=Math.abs(d.y2-d.y1))uy=0; else ux=0; }
+  d.x2=d.x1+ux*L; d.y2=d.y1+uy*L; return true; }
 /* encaixa um ponto na ponta de uma parede existente, se estiver perto */
 function snapToEnds(x,y){ const c=snapCandidates(x,y); return [c[0][0],c[0][1]]; }
 /* candidatos de encaixe: perto da ponta de uma parede, os 4 cantos da célula de ponta (as duas faces); senão o próprio ponto */
@@ -804,12 +820,22 @@ function deleteObj(h){
 }
 addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')return;
+  // entrada dinâmica: parede em desenho ou porta/janela sobre uma parede
+  const typing=(drag&&drag.kind==='wall')||((tool==='door'||tool==='window')&&(view==='plan'));
+  if(typing&&!e.ctrlKey&&!e.metaKey){
+    if(/^[0-9.,@;x|-]$/.test(e.key)){ cmd+=e.key; draw(); e.preventDefault(); return; }
+    if(e.key==='Backspace'){ cmd=cmd.slice(0,-1); draw(); e.preventDefault(); return; }
+    if(e.key==='Enter'){ e.preventDefault();
+      if(drag&&drag.kind==='wall'){ if(cmd){ if(applyTyped(drag)){ drag.sticky=true; finishWall(drag); } } else if(wallLen(drag)>=MOD()){ drag.sticky=true; finishWall(drag); } else { drag=null; cmd=''; setPrompt(''); draw(); } return; }
+      if(cmd&&hover&&hover.w){ const off=snap(Math.abs(+cmd.replace(',','.'))); const w=hover.w; addOpening(w,off+openDef[tool].w/2,tool); cmd=''; draw(); } return; }
+    if(e.key==='Escape'){ if(cmd){ cmd=''; draw(); e.preventDefault(); return; } }
+  }
   if(e.code==='Space'){spaceDown=true;cv.style.cursor='grab';}
   if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
   if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();}
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveProject();}
   if((e.key==='Delete'||e.key==='Backspace')&&sel){deleteObj(sel);}
-  if(e.key==='Escape'){drag=null;sel=null;showPanel();draw();}
+  if(e.key==='Escape'){drag=null;cmd='';sel=null;setPrompt('');showPanel();draw();}
   if(sel&&sel.type==='opening'&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){ e.preventDefault(); const o=sel.obj,w=wallById(o.wall); pushHistory(); o.off=Math.max(0,Math.min(wallLen(w)-o.width,o.off+(e.key==='ArrowRight'?1:-1)*S.settings.wallT)); draw(); showPanel(); }
   if(e.key==='r'&&tool==='furniture'){furnRot=!furnRot;draw();}
   if(!(sel&&sel.type==='opening')&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){ e.preventDefault(); const st=60/cam.z; if(e.key==='ArrowLeft')cam.x-=st; if(e.key==='ArrowRight')cam.x+=st; if(e.key==='ArrowUp')cam.y-=st; if(e.key==='ArrowDown')cam.y+=st; draw(); }
@@ -819,7 +845,7 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{ if(e.code==='Space'){spaceDown=false;setCursor();} });
 
 /* ---------- ferramentas / vistas ---------- */
-const hints={pan:'Mão (H): arraste para deslocar a planta. Rolar também desloca; Ctrl/Cmd + rolar ou pinça faz zoom.',wall:'Parede: clique e arraste a partir da ponta de outra parede para amarrar o canto. O comprimento ajusta-se para fechar em tijolos inteiros. (P)',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
+const hints={pan:'Mão (H): arraste para deslocar a planta. Rolar também desloca; Ctrl/Cmd + rolar ou pinça faz zoom.',wall:'Parede (P): clique no início, mova e clique no fim — ou digite o comprimento (300) ou @dx,dy e Enter. Cada parede encadeia a seguinte; Enter ou Esc termina. Arrastar também funciona.',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
 function setToolHint(){ $('#hint').textContent=(hints[tool]||'')+'  ·  Rolar: deslocar · Ctrl/Cmd + rolar: zoom · Botão direito ou Espaço + arrastar: deslocar'; }
 function setTool(t){ tool=t; setCursor(); $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); $('#openSize').classList.toggle('hidden',!(t==='door'||t==='window')); $('#furnPick').classList.toggle('hidden',t!=='furniture'); syncOpenInputs(); $('#hint').textContent=(hints[t]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; if(view!=='plan'&&view!=='services')setView('plan'); draw(); }
 $$('[data-tool]').forEach(b=>b.addEventListener('click',()=>{setTool(b.dataset.tool);closeMenus();}));
@@ -1095,7 +1121,7 @@ function openSettings(){
 function remodulate(){ for(const f of S.floors){ for(const w of f.walls){ w.x1=snap(w.x1);w.y1=snap(w.y1);w.x2=snap(w.x2);w.y2=snap(w.y2); if(wallLen(w)<MOD()){ const [dx,dy]=wallDir(w); w.x2=w.x1+dx*MOD(); w.y2=w.y1+dy*MOD(); } } for(const o of f.openings){ const w=wallById(o.wall); if(!w)continue; o.width=Math.max(MOD(),snap(o.width)); o.off=Math.max(0,Math.min(wallLen(w)-o.width,snap(o.off))); } for(const r of f.rooms.concat(f.furniture)){ r.x=snap(r.x);r.y=snap(r.y);r.w=Math.max(MOD(),snap(r.w));r.h=Math.max(MOD(),snap(r.h)); } } toast('Desenho reajustado ao módulo de '+fmt(MOD())+' cm.'); }
 function openTutorial(){
   modal(`<h3>Como usar o editor</h3><ol style="color:var(--ink2);padding-left:20px;line-height:1.8">
-  <li><b>Parede</b>: clique e arraste. As paredes são ortogonais e a grade é de meio tijolo. Comece uma parede na ponta de outra para amarrar o canto: as fiadas pares e ímpares alternam quem ocupa a célula do canto, e o comprimento é ajustado para fechar em tijolos inteiros (a cota mostra os tijolos de cada fiada). Se o corpo ficar do lado errado, selecione a parede e use "Inverter".</li>
+  <li><b>Parede</b>: clique no início, mova e clique no fim; ou digite o comprimento (ex.: <b>300</b>) ou coordenadas relativas (<b>@300,0</b>) e Enter. A parede seguinte começa automaticamente no fim da anterior; Enter ou Esc termina a cadeia. Com Porta/Janela, digite a distância ao início da parede e Enter para posicionar com exatidão. As paredes são ortogonais e a grade é de meio tijolo. Comece uma parede na ponta de outra para amarrar o canto: as fiadas pares e ímpares alternam quem ocupa a célula do canto, e o comprimento é ajustado para fechar em tijolos inteiros (a cota mostra os tijolos de cada fiada). Se o corpo ficar do lado errado, selecione a parede e use "Inverter".</li>
   <li><b>Porta / Janela</b>: clique sobre uma parede. Ajuste largura, altura e peitoril no painel à direita.</li>
   <li><b>Ambientes</b>: arraste um retângulo para nomear e medir a área.</li>
   <li><b>Fiadas</b>: veja a elevação parede a parede, com cada tijolo, os vãos e as colunas de graute. Escolha um tipo na barra (Canaleta, Graute, Meio, Vazio) e clique no tijolo para editar peça a peça.</li>
@@ -1272,7 +1298,7 @@ const TIPS={
   'data-view=course':'Fiadas: a parede vista de frente, tijolo a tijolo e fiada a fiada. Permite editar peça a peça.',
   'data-view=elev':'Elevações: fachada de cada parede com cotas de vãos, peitoris, vergas e colunas.',
   'data-view=sheet':'Pranchas: folha para imprimir ou gerar PDF, com planta, carimbo e quantitativo.',
-  'data-tool=wall':'Parede (P): clique e arraste. Comece na ponta de outra parede para fechar o canto; o comprimento ajusta-se a tijolos inteiros.',
+  'data-tool=wall':'Parede (P): clique no início, mova e clique no fim, ou digite o comprimento e Enter (ex.: 300 ou @300,0). As paredes encadeiam-se; Esc termina.',
   'data-tool=door':'Porta (D): defina largura e altura e clique numa parede. Arraste para mover; no painel escolha o sentido e a dobradiça.',
   'data-tool=window':'Janela (J): defina largura, altura e peitoril e clique numa parede. Arraste para mover.',
   'data-tool=furniture':'Mobiliário: arraste um retângulo e dê um nome (cama, mesa, bancada…).',
