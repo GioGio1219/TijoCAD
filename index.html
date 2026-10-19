@@ -357,7 +357,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     </div>
     <span id="furnPick" class="hidden" style="display:none;align-items:center;gap:6px;font-size:13px;color:var(--ink2)"><select id="furnSel" class="tb box" aria-label="Móvel"></select><button class="tb box" id="furnRot" data-tip="Girar 90° (tecla R)">⟳</button></span>
     <span id="openSize" class="hidden" style="display:none;align-items:center;gap:6px;font-size:13px;color:var(--ink2)">
-      <label>L <input id="opW" type="number" step="12.5" style="width:64px;font:inherit;padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink)"></label>
+      <label>L <input id="opW" type="number" step="12.5" list="opWList" style="width:64px;font:inherit;padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink)"><datalist id="opWList"><option value="62.5"><option value="75"><option value="87.5"><option value="100"><option value="125"><option value="150"></datalist></label>
       <label>A <input id="opH" type="number" step="7" style="width:64px;font:inherit;padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink)"></label>
       <label id="opSillL">Peitoril <input id="opS" type="number" step="7" style="width:64px;font:inherit;padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink)"></label>
       <span>cm</span>
@@ -410,7 +410,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <span class="sp"></span>
     <span id="stCursor">x 0 · y 0</span>
     <span id="stInfo"></span>
-    <span style="color:var(--ink3)" title="Versão do ficheiro">v8</span>
+    <span style="color:var(--ink3)" title="Versão do ficheiro">v9</span>
   </div>
 
   <div class="menu" id="toolsMenu">
@@ -645,7 +645,8 @@ const FURN=[['Cama solteiro',90,190],['Cama casal',140,190],['Cama queen',160,20
 let furnSel=0, furnRot=false;
 const openDef={door:{w:87.5,h:210,s:0},window:{w:100,h:105,s:105}};
 function syncOpenInputs(){ const d=openDef[tool]; if(!d)return; $('#opW').value=d.w; $('#opH').value=d.h; $('#opS').value=d.s; $('#opSillL').style.display=tool==='door'?'none':''; }
-['opW','opH','opS'].forEach(id=>$('#'+id).addEventListener('change',()=>{ const d=openDef[tool]; if(!d)return; const T=S.settings.wallT; d.w=Math.max(T,Math.round((+$('#opW').value||d.w)/T)*T); d.h=Math.max(S.settings.course,Math.round((+$('#opH').value||d.h)/S.settings.course)*S.settings.course); d.s=tool==='door'?0:Math.max(0,Math.round((+$('#opS').value||0)/S.settings.course)*S.settings.course); syncOpenInputs(); }));
+function readOpenInputs(){ const d=openDef[tool]; if(!d)return; const T=S.settings.wallT,cs=S.settings.course; const w=+$('#opW').value,h=+$('#opH').value,sv=+$('#opS').value; if(w>0)d.w=Math.max(T,Math.round(w/T)*T); if(h>0)d.h=Math.max(cs,Math.round(h/cs)*cs); d.s=tool==='door'?0:Math.max(0,Math.round((sv||0)/cs)*cs); }
+['opW','opH','opS'].forEach(id=>{ $('#'+id).addEventListener('input',readOpenInputs); $('#'+id).addEventListener('change',()=>{ readOpenInputs(); syncOpenInputs(); }); });
 const svcById=id=>F().services.find(p=>p.id===id);
 function svcHit(x,y){ let best=null; for(const p of F().services){ const d=Math.hypot(x-p.x,y-p.y); if(d<14&&(!best||d<best.d))best={p,d}; } return best&&best.p; }
 function conduitHit(x,y){ for(const c of F().conduits){ const a=svcById(c.a),b=svcById(c.b); if(!a||!b)continue; const L=Math.hypot(b.x-a.x,b.y-a.y)||1; const t=Math.max(0,Math.min(1,((x-a.x)*(b.x-a.x)+(y-a.y)*(b.y-a.y))/(L*L))); if(Math.hypot(x-(a.x+(b.x-a.x)*t),y-(a.y+(b.y-a.y)*t))<8)return c; } return null; }
@@ -681,7 +682,7 @@ cv.addEventListener('pointerdown',e=>{
   else if(tool==='measure'){ drag={kind:'measure',x1:x,y1:y,x2:x,y2:y}; }
   else if(tool==='furniture'&&FURN[furnSel][1]){ const f=FURN[furnSel]; const w=furnRot?f[2]:f[1],h=furnRot?f[1]:f[2]; pushHistory(); F().furniture.push({id:uid(),x:sx,y:sy,w,h,name:f[0]}); draw(); }
   else if(tool==='room'||tool==='furniture'){ drag={kind:tool,x1:sx,y1:sy,x2:sx,y2:sy}; }
-  else if(tool==='door'||tool==='window'){ const h=hitTest(x,y); if(h&&h.type==='opening'){ sel=h; drag={kind:'move',h,ox:x,oy:y,start:JSON.stringify(h.obj)}; showPanel(); draw(); return; } const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede.');return;} addOpening(nw.w,nw.t,tool); }
+  else if(tool==='door'||tool==='window'){ readOpenInputs(); const h=hitTest(x,y); if(h&&h.type==='opening'){ sel=h; drag={kind:'move',h,ox:x,oy:y,start:JSON.stringify(h.obj)}; showPanel(); draw(); return; } const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede.');return;} addOpening(nw.w,nw.t,tool); }
   else if(tool==='text'){ const t=prompt('Texto:'); if(t){pushHistory(); F().texts.push({id:uid(),x:sx,y:sy,text:t}); draw();} }
   else if(tool==='column'){ const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede.');return;} pushHistory(); const [dx,dy]=wallDir(nw.w); const t=snap(nw.t); F().columns.push({id:uid(),x:nw.w.x1+dx*t,y:nw.w.y1+dy*t}); draw(); }
   else if(tool==='erase'){ const h=hitTest(x,y); if(h){deleteObj(h);} }
