@@ -410,7 +410,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <span class="sp"></span>
     <span id="stCursor">x 0 · y 0</span>
     <span id="stInfo"></span>
-    <span style="color:var(--ink3)" title="Versão do ficheiro">v9</span>
+    <span style="color:var(--ink3)" title="Versão do ficheiro">v11</span>
   </div>
 
   <div class="menu" id="toolsMenu">
@@ -601,8 +601,10 @@ function drawWall(w,T,ghost){
   // corpo
   ctx.save();
   ctx.translate(ax,ay); ctx.rotate(Math.atan2(dy,dx));
+  // corpo: só no trecho que esta parede ocupa na fiada mostrada (nos cantos e T a outra parede desenha a célula)
+  const a0=ghost?0:(ownsEnd(w,false,show.odd)?0:T), b0=ghost?L:(ownsEnd(w,true,show.odd)?L:L-T);
   ctx.fillStyle=ghost?css('--clay-soft'):css('--surface2');
-  ctx.fillRect(0,hb,L*cam.z,Hb);
+  ctx.fillRect(a0*cam.z,hb,(b0-a0)*cam.z,Hb);
   // aberturas (recorte)
   const ops=ghost?[]:F().openings.filter(o=>o.wall===w.id);
   // tijolos da fiada mostrada (par por defeito); células de canto ocupadas pela outra parede ficam vazias
@@ -619,7 +621,7 @@ function drawWall(w,T,ghost){
     ctx.globalAlpha=1;
   }
   ctx.strokeStyle=isSel?css('--clay'):css('--ink'); ctx.lineWidth=isSel?2:1.3;
-  ctx.strokeRect(0,hb,L*cam.z,Hb);
+  ctx.strokeRect(a0*cam.z,hb,(b0-a0)*cam.z,Hb);
   // aberturas
   for(const o of ops){
     ctx.fillStyle=css('--surface'); ctx.fillRect(o.off*cam.z+0.5,hb-1,o.width*cam.z-1,Hb+2);
@@ -682,7 +684,7 @@ cv.addEventListener('pointerdown',e=>{
   else if(tool==='measure'){ drag={kind:'measure',x1:x,y1:y,x2:x,y2:y}; }
   else if(tool==='furniture'&&FURN[furnSel][1]){ const f=FURN[furnSel]; const w=furnRot?f[2]:f[1],h=furnRot?f[1]:f[2]; pushHistory(); F().furniture.push({id:uid(),x:sx,y:sy,w,h,name:f[0]}); draw(); }
   else if(tool==='room'||tool==='furniture'){ drag={kind:tool,x1:sx,y1:sy,x2:sx,y2:sy}; }
-  else if(tool==='door'||tool==='window'){ readOpenInputs(); const h=hitTest(x,y); if(h&&h.type==='opening'){ sel=h; drag={kind:'move',h,ox:x,oy:y,start:JSON.stringify(h.obj)}; showPanel(); draw(); return; } const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede.');return;} addOpening(nw.w,nw.t,tool); }
+  else if(tool==='door'||tool==='window'){ readOpenInputs(); const h=hitTest(x,y); if(h&&h.type==='opening'){ sel=h; drag={kind:'move',h,ox:x,oy:y,start:JSON.stringify(h.obj)}; showPanel(); draw(); return; } if(fillGap(x,y,tool))return; const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede: o vão é aberto nela. Ou clique no espaço entre dois trechos alinhados para uni-los com o vão.');return;} addOpening(nw.w,nw.t,tool); }
   else if(tool==='text'){ const t=prompt('Texto:'); if(t){pushHistory(); F().texts.push({id:uid(),x:sx,y:sy,text:t}); draw();} }
   else if(tool==='column'){ const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede.');return;} pushHistory(); const [dx,dy]=wallDir(nw.w); const t=snap(nw.t); F().columns.push({id:uid(),x:nw.w.x1+dx*t,y:nw.w.y1+dy*t}); draw(); }
   else if(tool==='erase'){ const h=hitTest(x,y); if(h){deleteObj(h);} }
@@ -758,6 +760,22 @@ function openingIssues(o){ const w=wallById(o.wall); if(!w)return []; const s=S.
   if(o.sill+o.height>s.wallH-s.course)out.push('Vão chega ao topo da parede: não há fiada para a verga.');
   if(o.width%bl!==0&&o.width%s.wallT===0)out.push('Largura em meio tijolo: a verga e as laterais exigem meias peças.');
   return out; }
+/* clique num espaço entre dois trechos alinhados: une-os numa parede e cria o vão com a largura do espaço */
+function fillGap(x,y,type){ const T=S.settings.wallT, f=F();
+  for(const A of f.walls){ const [dx,dy]=wallDir(A), LA=wallLen(A);
+    for(const B of f.walls){ if(B===A)continue; const [bx,by]=wallDir(B); const dot=dx*bx+dy*by; if(Math.abs(Math.abs(dot)-1)>0.01)continue;
+      const near=dot>0?[B.x1,B.y1]:[B.x2,B.y2]; const t=(near[0]-A.x1)*dx+(near[1]-A.y1)*dy; const pd=Math.abs(-(near[0]-A.x1)*dy+(near[1]-A.y1)*dx); if(pd>0.5)continue;
+      const gap=t-LA; if(gap<T-0.01||gap>400)continue;
+      const tc=(x-A.x1)*dx+(y-A.y1)*dy; const [nx,ny]=wallNormal(A); const ly=(x-A.x1)*nx+(y-A.y1)*ny; if(tc<LA-T||tc>t+T||ly<-T*1.5||ly>T*2.5)continue;
+      pushHistory(); const LB=wallLen(B);
+      if(dot<0){ // B desenhada no sentido contrário: inverte para manter o corpo do mesmo lado
+        for(const o of f.openings.filter(o=>o.wall===B.id))o.off=LB-o.off-o.width; [B.x1,B.y1,B.x2,B.y2]=[B.x2,B.y2,B.x1,B.y1]; B.side=-(B.side||1); }
+      if((B.side||1)!==(A.side||1)){ B.side=A.side||1; }
+      for(const o of f.openings.filter(o=>o.wall===B.id)){ o.wall=A.id; o.off+=LA+gap; }
+      A.x2=B.x2; A.y2=B.y2; f.walls=f.walls.filter(w=>w!==B);
+      const d=openDef[type]; const o={id:uid(),wall:A.id,off:LA,width:gap,type,height:d.h,sill:d.s}; f.openings.push(o); sel={type:'opening',obj:o}; draw(); showPanel();
+      const iss=openingIssues(o); toast(iss.length?'⚠ '+iss[0]:'Trechos unidos numa parede e '+(type==='door'?'porta':'janela')+' de '+fmt(gap)+' cm colocada no vão.'); return true; } }
+  return false; }
 function addOpening(w,t,type){
   const d=openDef[type], width=d.w; const L=wallLen(w);
   if(L<width){toast('Parede curta demais para este vão.');return;}
@@ -793,7 +811,7 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{ if(e.code==='Space'){spaceDown=false;cv.style.cursor='crosshair';} });
 
 /* ---------- ferramentas / vistas ---------- */
-const hints={wall:'Parede: clique e arraste a partir da ponta de outra parede para amarrar o canto. O comprimento ajusta-se para fechar em tijolos inteiros. (P)',door:'Porta: defina largura e altura na barra e clique sobre uma parede. (D)',window:'Janela: defina largura, altura e peitoril na barra e clique sobre uma parede. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
+const hints={wall:'Parede: clique e arraste a partir da ponta de outra parede para amarrar o canto. O comprimento ajusta-se para fechar em tijolos inteiros. (P)',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
 function setToolHint(){ $('#hint').textContent=(hints[tool]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; }
 function setTool(t){ tool=t; $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); $('#openSize').classList.toggle('hidden',!(t==='door'||t==='window')); $('#furnPick').classList.toggle('hidden',t!=='furniture'); syncOpenInputs(); $('#hint').textContent=(hints[t]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; if(view!=='plan'&&view!=='services')setView('plan'); draw(); }
 $$('[data-tool]').forEach(b=>b.addEventListener('click',()=>{setTool(b.dataset.tool);closeMenus();}));
