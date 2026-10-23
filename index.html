@@ -126,6 +126,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 }
 @media (max-width:600px){ .grid3,.pgrid{grid-template-columns:1fr} .topbar .in{gap:12px} .hero .tags{gap:14px} }
 @media (prefers-reduced-motion:reduce){ *{transition:none !important} }
+@media (max-width:1500px){ .ebar{gap:4px;padding:6px 8px} .tb{padding:6px 8px;font-size:14px;gap:5px} .tbgroup .tb{padding:5px 8px} .ebar .sep{margin:0 2px} .brand{font-size:16px} .hint{max-width:300px;font-size:13px} .legend{font-size:11px;gap:10px} }
 
 /* ---------- editor ---------- */
 #app{position:fixed;inset:0;top:env(safe-area-inset-top,0px);display:flex;flex-direction:column;background:var(--surface);z-index:40}
@@ -411,11 +412,12 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <span class="sp"></span>
     <span id="stCursor">x 0 · y 0</span>
     <span id="stInfo"></span>
-    <span style="color:var(--ink3)" title="Versão do ficheiro">v13</span>
+    <span style="color:var(--ink3)" title="Versão do ficheiro">v14</span>
   </div>
 
   <div class="menu" id="toolsMenu">
     <button data-act="settings"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>Configurações</button>
+    <button data-act="bgAdjust"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="M8 4v16M16 4v16M3 12h18"/></svg>Ajustar imagem de fundo</button>
     <button data-act="import"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>Importar imagem de fundo</button>
     <button data-act="export"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>Exportar</button>
     <button data-act="sheets"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Pranchas</button>
@@ -559,15 +561,18 @@ function draw(){
   ctx.clearRect(0,0,W,H);
   const f=F();
   // fundo
-  if(show.bg&&f.bg&&f.bg.img){ const [sx,sy]=toScr(f.bg.x,f.bg.y); ctx.globalAlpha=.45; ctx.drawImage(f.bg.img,sx,sy,f.bg.w*cam.z,f.bg.h*cam.z); ctx.globalAlpha=1; }
+  const hasBg=show.bg&&f.bg&&f.bg.img; if(hasBg){ const [sx,sy]=toScr(f.bg.x,f.bg.y); ctx.globalAlpha=f.bg.opacity==null?.55:f.bg.opacity; ctx.drawImage(f.bg.img,sx,sy,f.bg.w*cam.z,f.bg.h*cam.z); ctx.globalAlpha=1; if(tool==='bgmove'||tool==='calib'){ ctx.strokeStyle=css('--clay'); ctx.setLineDash([6,4]); ctx.strokeRect(sx,sy,f.bg.w*cam.z,f.bg.h*cam.z); ctx.setLineDash([]); } }
   // grade
-  if(show.grid){
+  if(show.grid){ ctx.globalAlpha=hasBg?.3:1;
     const step=MOD()*cam.z; const big=step*8;
     const [x0,y0]=toWld(0,0),[x1,y1]=toWld(W,H);
     ctx.lineWidth=1;
     for(let gx=Math.floor(x0/MOD())*MOD();gx<x1;gx+=MOD()){ const [sx]=toScr(gx,0); const isBig=Math.round(gx/100)*100===gx; if(step<6&&!isBig)continue; ctx.strokeStyle=isBig?css('--line2'):css('--line'); ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,H);ctx.stroke(); }
     for(let gy=Math.floor(y0/MOD())*MOD();gy<y1;gy+=MOD()){ const [,sy]=toScr(0,gy); const isBig=Math.round(gy/100)*100===gy; if(step<6&&!isBig)continue; ctx.strokeStyle=isBig?css('--line2'):css('--line'); ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(W,sy);ctx.stroke(); }
   }
+  ctx.globalAlpha=1;
+  // calibração em curso
+  if(drag&&drag.kind==='calib'){ const [ax,ay]=toScr(drag.x1,drag.y1),[bx,by]=toScr(mouse[0],mouse[1]); ctx.strokeStyle=css('--warn'); ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); ctx.beginPath(); ctx.arc(ax,ay,5,0,7); ctx.stroke(); label((ax+bx)/2,(ay+by)/2-12,'2.º ponto: clique no fim da medida conhecida',css('--warn')); }
   // ambientes
   if(show.rooms) for(const r of f.rooms){ const [sx,sy]=toScr(r.x,r.y); ctx.fillStyle=css('--clay'); ctx.globalAlpha=.07; ctx.fillRect(sx,sy,r.w*cam.z,r.h*cam.z); ctx.globalAlpha=1; ctx.fillStyle=css('--ink2'); ctx.font=`600 ${Math.max(11,12*cam.z/1.4)}px Inter`; ctx.textAlign='center'; ctx.fillText(r.name,sx+r.w*cam.z/2,sy+r.h*cam.z/2-4); ctx.font=`${Math.max(10,11*cam.z/1.4)}px Inter`; ctx.fillText(fmt(roomPolygonArea(r),2)+' m²',sx+r.w*cam.z/2,sy+r.h*cam.z/2+12); }
   // mobiliário
@@ -681,6 +686,10 @@ cv.addEventListener('pointerdown',e=>{
   const [x,y]=toWld(e.offsetX,e.offsetY);
   if(e.button===1||e.button===2||spaceDown||tool==='pan'){ panning={sx:e.offsetX,sy:e.offsetY,cx:cam.x,cy:cam.y}; return; }
   const sx=snap(x),sy=snap(y);
+  if(tool==='bgmove'){ const bg=F().bg; if(!bg){toast('Não há imagem de fundo.');return;} drag={kind:'bgmove',ox:x,oy:y,bx:bg.x,by:bg.y}; return; }
+  if(tool==='calib'){ if(!F().bg){toast('Não há imagem de fundo.');return;} if(!drag||drag.kind!=='calib'){ drag={kind:'calib',x1:x,y1:y}; setPrompt('Calibrar: clique no 2.º ponto da medida conhecida'); draw(); return; }
+    const d=Math.hypot(x-drag.x1,y-drag.y1); const p1=[drag.x1,drag.y1]; drag=null; if(d<1)return; const real=prompt('Distância real entre os dois pontos (cm):','300'); if(real===null||!(+real>0)){draw();return;}
+    const k=(+real)/d, bg=F().bg; pushHistory(); bg.w*=k; bg.h*=k; bg.x=p1[0]-(p1[0]-bg.x)*k; bg.y=p1[1]-(p1[1]-bg.y)*k; setPrompt(''); toast('Imagem calibrada: '+fmt(bg.w/100,2)+' m de largura.'); openBgPanel(); draw(); return; }
   if(view==='services'){
     if(svcTool==='erase'){ const p=svcHit(x,y); if(p){ pushHistory(); F().services=F().services.filter(q=>q!==p); F().conduits=F().conduits.filter(c=>c.a!==p.id&&c.b!==p.id); draw(); return; } const c=conduitHit(x,y); if(c){ pushHistory(); F().conduits=F().conduits.filter(q=>q!==c); draw(); } return; }
     const p=svcHit(x,y);
@@ -712,9 +721,11 @@ cv.addEventListener('pointermove',e=>{
     else if(drag.kind==='room'||drag.kind==='furniture'){ drag.x2=snap(x);drag.y2=snap(y); }
     else if(drag.kind==='move'){ moveObj(drag.h,snap(x-drag.ox),snap(y-drag.oy)); }
     else if(drag.kind==='conduit'){ drag.x=x;drag.y=y; }
+    else if(drag.kind==='bgmove'){ const bg=F().bg; bg.x=drag.bx+(x-drag.ox); bg.y=drag.by+(y-drag.oy); }
     draw(); return;
   }
   if(view==='services')return;
+  if(tool==='calib'&&drag&&drag.kind==='calib'){ draw(); }
   if(tool==='door'||tool==='window'){ hover=nearestWall(x,y,30); const hh=hitTest(x,y); cv.style.cursor=(hh&&hh.type==='opening')?'move':'crosshair'; if(hover){ const width=openDef[tool].w; const off=Math.max(0,Math.min(wallLen(hover.w)-width,snap(hover.t-width/2))); $('#stInfo').textContent='Posição: '+fmt(off)+' cm do início da parede'; } else $('#stInfo').textContent=''; draw(); }
   else if(tool==='wall'||tool==='room'||tool==='furniture'||tool==='column') draw();
 });
@@ -722,6 +733,8 @@ cv.addEventListener('pointerup',e=>{
   if(panning){panning=null;return;}
   if(!drag)return;
   if(drag.kind==='wall'){ const L=Math.hypot(drag.x2-drag.x1,drag.y2-drag.y1); if(L<MOD()||Date.now()-drag.t0<250){ drag.sticky=true; return; } finishWall(drag); return; }
+  if(drag.kind==='calib')return;
+  if(drag.kind==='bgmove'){ pushHistory(); drag=null; openBgPanel(); draw(); return; }
   const d=drag; drag=null; $('#stInfo').textContent='';
   if(d.kind==='room'){ const w=Math.abs(d.x2-d.x1),h=Math.abs(d.y2-d.y1); if(w>0&&h>0){ const name=prompt('Nome do ambiente:','Sala'); if(name){pushHistory(); F().rooms.push({id:uid(),x:Math.min(d.x1,d.x2),y:Math.min(d.y1,d.y2),w,h,name});} } }
   else if(d.kind==='furniture'){ const w=Math.abs(d.x2-d.x1),h=Math.abs(d.y2-d.y1); if(w>0&&h>0){ const name=prompt('Nome do móvel:','Cama'); if(name){pushHistory(); F().furniture.push({id:uid(),x:Math.min(d.x1,d.x2),y:Math.min(d.y1,d.y2),w,h,name});} } }
@@ -845,9 +858,9 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{ if(e.code==='Space'){spaceDown=false;setCursor();} });
 
 /* ---------- ferramentas / vistas ---------- */
-const hints={pan:'Mão (H): arraste para deslocar a planta. Rolar também desloca; Ctrl/Cmd + rolar ou pinça faz zoom.',wall:'Parede (P): clique no início, mova e clique no fim — ou digite o comprimento (300) ou @dx,dy e Enter. Cada parede encadeia a seguinte; Enter ou Esc termina. Arrastar também funciona.',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
+const hints={calib:'Calibrar imagem: clique em dois pontos com distância real conhecida e escreva a medida em cm.',bgmove:'Mover imagem: arraste a imagem de fundo até alinhar com a grade. Concluir volta à Parede.',pan:'Mão (H): arraste para deslocar a planta. Rolar também desloca; Ctrl/Cmd + rolar ou pinça faz zoom.',wall:'Parede (P): clique no início, mova e clique no fim — ou digite o comprimento (300) ou @dx,dy e Enter. Cada parede encadeia a seguinte; Enter ou Esc termina. Arrastar também funciona.',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
 function setToolHint(){ $('#hint').textContent=(hints[tool]||'')+'  ·  Rolar: deslocar · Ctrl/Cmd + rolar: zoom · Botão direito ou Espaço + arrastar: deslocar'; }
-function setTool(t){ tool=t; setCursor(); $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); $('#openSize').classList.toggle('hidden',!(t==='door'||t==='window')); $('#furnPick').classList.toggle('hidden',t!=='furniture'); syncOpenInputs(); $('#hint').textContent=(hints[t]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; if(view!=='plan'&&view!=='services')setView('plan'); draw(); }
+function setTool(t){ tool=t; setCursor(); if(t==='calib')cv.style.cursor='crosshair'; if(t==='bgmove')cv.style.cursor='move'; $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); $('#openSize').classList.toggle('hidden',!(t==='door'||t==='window')); $('#furnPick').classList.toggle('hidden',t!=='furniture'); syncOpenInputs(); $('#hint').textContent=(hints[t]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; if(view!=='plan'&&view!=='services')setView('plan'); draw(); }
 $$('[data-tool]').forEach(b=>b.addEventListener('click',()=>{setTool(b.dataset.tool);closeMenus();}));
 function setCursor(){ cv.style.cursor=tool==='pan'?'grab':'crosshair'; }
 function setView(v){ view=v; $$('#views .tb').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
@@ -895,6 +908,7 @@ function act(a){
   else if(a==='dupFloor'){ pushHistory(); const c=JSON.parse(JSON.stringify(F())); c.bg=null; c.name=F().name+' (cópia)'; S.floors.splice(S.floor+1,0,c); S.floor++; afterLoad(); }
   else if(a==='delFloor'){ if(S.floors.length===1)return toast('O projeto precisa de pelo menos um pavimento.'); if(!confirm('Remover o pavimento "'+F().name+'"?'))return; pushHistory(); S.floors.splice(S.floor,1); S.floor=Math.max(0,S.floor-1); afterLoad(); }
   else if(a==='fit')fit();
+  else if(a==='bgAdjust'){ if(!F().bg){ toast('Importe primeiro uma imagem (Ferramentas › Importar imagem de fundo).'); return; } setView('plan'); openBgPanel(); }
   else if(a==='selftest')selfTest();
 }
 $('#undo').onclick=undo; $('#redo').onclick=redo;
@@ -1177,7 +1191,7 @@ let toastT; function toast(m){ const t=$('#toast'); t.textContent=m; t.classList
 
 /* ---------- persistência ---------- */
 const LS='fiadacad:projects';
-function serialize(){ const c=JSON.parse(JSON.stringify(S)); c.floors.forEach(f=>{ if(f.bg)f.bg={x:f.bg.x,y:f.bg.y,w:f.bg.w,h:f.bg.h,src:f.bg.src}; }); c.nextId=nextId; return c; }
+function serialize(){ const c=JSON.parse(JSON.stringify(S)); c.floors.forEach(f=>{ if(f.bg)f.bg={x:f.bg.x,y:f.bg.y,w:f.bg.w,h:f.bg.h,src:f.bg.src,opacity:f.bg.opacity}; }); c.nextId=nextId; return c; }
 function loadState(obj){ S=Object.assign(defaults(),obj); if(!S.settings.wallT)S.settings.wallT=S.settings.brickW; if(S.settings.belt===undefined)S.settings.belt=true; if(S.settings.slab===undefined)S.settings.slab=true; S.settings.price=Object.assign({brick:1.6,half:1.1,canal:2.2,groutL:0.9,rebarM:6.5,glue:38,day:420},S.settings.price||{}); for(const f of S.floors)for(const w of f.walls)if(!w.side)w.side=1; if(!S.settings.preset)S.settings.preset=S.settings.brickL===30?'15x30':'12.5x25'; nextId=obj.nextId||1; S.floors.forEach(f=>{ ['walls','openings','rooms','texts','furniture','columns','services','conduits'].forEach(k=>f[k]=f[k]||[]); f.overrides=f.overrides||{}; if(f.bg&&f.bg.src){ const im=new Image(); im.onload=draw; im.src=f.bg.src; f.bg.img=im; } }); history=[];future=[]; setDirty(false); afterLoad(); fit(); }
 function getProjects(){ try{ return JSON.parse(localStorage.getItem(LS)||'[]'); }catch(e){ return []; } }
 function saveProject(){
@@ -1195,7 +1209,25 @@ function openProjects(){
   $('#pjNew').onclick=()=>{ if(dirty&&!confirm('Descartar alterações não salvas?'))return; S=defaults(); nextId=1; history=[];future=[]; setDirty(false); afterLoad(); closeModal(); };
   $('#pjImport').onclick=()=>{ $('#fileIn').accept='.json'; $('#fileIn').onchange=e=>{ const fl=e.target.files[0]; if(!fl)return; fl.text().then(t=>{ try{ loadState(JSON.parse(t)); closeModal(); toast('Projeto importado.'); }catch(err){ toast('Arquivo inválido.'); } }); e.target.value=''; }; $('#fileIn').click(); };
 }
-function importImage(e){ const fl=e.target.files[0]; if(!fl)return; const rd=new FileReader(); rd.onload=()=>{ const im=new Image(); im.onload=()=>{ pushHistory(); const w=1000, h=w*im.height/im.width; F().bg={x:0,y:0,w,h,src:rd.result,img:im}; toast('Imagem colocada com 10 m de largura. Ajuste em Configurações se precisar.'); draw(); }; im.src=rd.result; }; rd.readAsDataURL(fl); e.target.value=''; }
+function importImage(e){ const fl=e.target.files[0]; if(!fl)return; const rd=new FileReader(); rd.onload=()=>{ const im=new Image(); im.onload=()=>{ pushHistory(); const w=1000, h=w*im.height/im.width; F().bg={x:0,y:0,w,h,src:rd.result,img:im,opacity:.55}; toast('Imagem colocada com 10 m de largura. Calibre com dois pontos para acertar a escala.'); openBgPanel(); draw(); }; im.src=rd.result; }; rd.readAsDataURL(fl); e.target.value=''; }
+function openBgPanel(){ const bg=F().bg; const p=$('#panel'); if(!bg){ p.classList.add('hidden'); return; } p.classList.remove('hidden'); sel=null;
+  p.innerHTML=`<h4>Imagem de fundo</h4>
+  <div class="row"><span>Transparência</span><input id="bgOp" type="range" min="0.1" max="1" step="0.05" value="${bg.opacity==null?.55:bg.opacity}" style="width:120px"></div>
+  <div class="row"><span>Largura (cm)</span><input id="bgW" type="number" step="10" value="${Math.round(bg.w)}"></div>
+  <div class="row"><span>X · Y (cm)</span><span style="display:flex;gap:4px"><input id="bgX" type="number" step="12.5" value="${bg.x}" style="width:58px"><input id="bgY" type="number" step="12.5" value="${bg.y}" style="width:58px"></span></div>
+  <div class="acts" style="flex-wrap:wrap"><button class="btn primary sm" id="bgCal">Calibrar (2 pontos)</button><button class="btn ghost sm" id="bgMove">Mover (arrastar)</button><button class="btn ghost sm" id="bgRot">Girar 90°</button><button class="btn ghost sm" id="bgFlip">Espelhar</button><button class="btn ghost sm" id="bgDone">Concluir</button><button class="btn ghost sm" id="bgDel">Remover</button></div>
+  <p style="margin:10px 0 0;font-size:12px;color:var(--ink3)">Calibrar: clique em dois pontos da imagem cuja distância real conhece (ex.: a largura de um cômodo cotado) e escreva a medida. Depois decalque as paredes por cima com cliques ou comprimentos digitados.</p>`;
+  $('#bgOp').oninput=e=>{ bg.opacity=+e.target.value; draw(); };
+  $('#bgW').onchange=e=>{ const w=+e.target.value; if(w>0){ pushHistory(); bg.h*=w/bg.w; bg.w=w; draw(); } };
+  $('#bgX').onchange=e=>{ pushHistory(); bg.x=+e.target.value; draw(); }; $('#bgY').onchange=e=>{ pushHistory(); bg.y=+e.target.value; draw(); };
+  $('#bgCal').onclick=()=>{ setTool('calib'); setPrompt('Calibrar: clique no 1.º ponto da medida conhecida'); };
+  $('#bgMove').onclick=()=>{ setTool('bgmove'); };
+  $('#bgDone').onclick=()=>{ setTool('wall'); p.classList.add('hidden'); };
+  $('#bgDel').onclick=()=>{ if(!confirm('Remover a imagem de fundo?'))return; pushHistory(); F().bg=null; p.classList.add('hidden'); setTool('wall'); draw(); };
+  const redraw=(fn)=>{ const im=bg.img; const c=document.createElement('canvas'); fn(c,im); const im2=new Image(); im2.onload=()=>{ bg.img=im2; bg.src=c.toDataURL('image/png'); draw(); openBgPanel(); }; im2.src=c.toDataURL('image/png'); };
+  $('#bgRot').onclick=()=>{ pushHistory(); redraw((c,im)=>{ c.width=im.height; c.height=im.width; const g=c.getContext('2d'); g.translate(c.width,0); g.rotate(Math.PI/2); g.drawImage(im,0,0); }); const w=bg.w; bg.w=bg.h; bg.h=w; };
+  $('#bgFlip').onclick=()=>{ pushHistory(); redraw((c,im)=>{ c.width=im.width; c.height=im.height; const g=c.getContext('2d'); g.translate(c.width,0); g.scale(-1,1); g.drawImage(im,0,0); }); };
+}
 
 let dl=null; (async()=>{ try{ if(window.claude&&claude.use)dl=await claude.use('downloads'); }catch(e){} })();
 async function download(name,data){
@@ -1319,7 +1351,7 @@ const TIPS={
   'data-mode3d=tech':'Técnico: paredes claras com arestas, bom para ler a geometria.','data-mode3d=xray':'Raio-X: paredes translúcidas com as colunas de graute e o aço visíveis.','data-mode3d=show':'Vitrine: acabamento em tijolo aparente, sem grade.',
   'data-svc=ele':'Elétrica: caixas e eletrodutos.','data-svc=hid':'Hidráulica: pontos de água e tubulação.','data-svc=esg':'Esgoto: pontos e tubulação de esgoto.','data-svc=gas':'Gás: pontos e tubulação de gás.','data-svc=erase':'Apagar pontos e conduítes.',
   'data-btype=auto':'Automático: restaura o tipo calculado pelo editor.','data-btype=canaleta':'Canaleta: tijolo em U para verga, contraverga ou cinta.','data-btype=graute':'Graute: marca o furo deste tijolo para grautear.','data-btype=meio':'Meio tijolo: peça de fábrica de 12,5 cm.','data-btype=vazio':'Vazio: remove o tijolo desta posição (passagem, nicho).',
-  'data-act=settings':'Tijolo (12,5×25 ou 15×30), altura da fiada e da parede, espaçamento das colunas, perda.','data-act=import':'Coloca uma imagem (planta antiga, croqui) por baixo do desenho.','data-act=export':'Baixa JSON, PNG, SVG, CSV ou PDF.','data-act=sheets':'Abre a prancha para imprimir.','data-act=share':'Copia um link com o projeto embutido.','data-act=takeoff':'Tijolos, meios, canaletas, colunas, aço, graute e cola por parede.','data-act=render':'Abre a vista 3D.','data-act=comfort':'Relação janela/piso por ambiente (iluminação natural).','data-act=planning':'Estimativa de prazo da alvenaria.','data-act=analysis':'Verificações de modulação e de vãos.','data-act=dupFloor':'Copia o pavimento atual.','data-act=delFloor':'Remove o pavimento atual.','data-act=fit':'Enquadra o desenho na tela.','data-act=selftest':'Corre verificações automáticas da modulação (cantos, T, colunas, vergas, quantitativo).'
+  'data-act=settings':'Tijolo (12,5×25 ou 15×30), altura da fiada e da parede, espaçamento das colunas, perda.','data-act=import':'Coloca uma imagem (planta antiga, croqui) por baixo do desenho.','data-act=bgAdjust':'Calibrar a escala com 2 pontos, mover, girar, espelhar e ajustar a transparência da imagem de fundo.','data-act=export':'Baixa JSON, PNG, SVG, CSV ou PDF.','data-act=sheets':'Abre a prancha para imprimir.','data-act=share':'Copia um link com o projeto embutido.','data-act=takeoff':'Tijolos, meios, canaletas, colunas, aço, graute e cola por parede.','data-act=render':'Abre a vista 3D.','data-act=comfort':'Relação janela/piso por ambiente (iluminação natural).','data-act=planning':'Estimativa de prazo da alvenaria.','data-act=analysis':'Verificações de modulação e de vãos.','data-act=dupFloor':'Copia o pavimento atual.','data-act=delFloor':'Remove o pavimento atual.','data-act=fit':'Enquadra o desenho na tela.','data-act=selftest':'Corre verificações automáticas da modulação (cantos, T, colunas, vergas, quantitativo).'
 };
 (function initTips(){ const tip=$('#tip'); for(const k in TIPS){ const [a,v]=k.split('='); const sel=a==='id'?'#'+v:`[${a}="${v}"]`; $$(sel).forEach(el=>{ el.dataset.tip=TIPS[k]; el.removeAttribute('title'); }); }
   let t; document.addEventListener('mouseover',e=>{ const el=e.target.closest('[data-tip]'); if(!el){tip.classList.remove('show');return;} clearTimeout(t); t=setTimeout(()=>{ tip.textContent=el.dataset.tip; const r=el.getBoundingClientRect(); tip.style.left=Math.min(innerWidth-300,Math.max(8,r.left))+'px'; tip.style.top=(r.bottom+8)+'px'; tip.classList.add('show'); },350); });
