@@ -354,6 +354,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <div class="tbgroup" id="drawTools">
       <button class="tb on" data-tool="wall"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8"/><path d="M8 8v8M16 8v8"/></svg>Parede</button>
       <button class="tb" data-tool="door"><svg class="ic" viewBox="0 0 24 24"><path d="M5 21V4h14v17"/><path d="M9 21V9h6v12"/></svg>Porta</button>
+      <button class="tb" data-tool="passage"><svg class="ic" viewBox="0 0 24 24"><path d="M3 20V5h5M21 20V5h-5M8 5h8" stroke-dasharray="3 2"/></svg>Passagem</button>
       <button class="tb" data-tool="window"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M4 12h16M12 4v16"/></svg>Janela</button>
       <button class="tb" data-tool="furniture"><svg class="ic" viewBox="0 0 24 24"><path d="M4 12h16v6H4zM6 18v2M18 18v2M6 12V7h12v5"/></svg>Mobiliário</button>
     </div>
@@ -412,7 +413,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <span class="sp"></span>
     <span id="stCursor">x 0 · y 0</span>
     <span id="stInfo"></span>
-    <span style="color:var(--ink3)" title="Versão do ficheiro">v14</span>
+    <span style="color:var(--ink3)" title="Versão do ficheiro">v16</span>
   </div>
 
   <div class="menu" id="toolsMenu">
@@ -440,6 +441,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
   </div>
   <div class="menu" id="moreMenu">
     <button data-tool="column"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="4" width="8" height="16"/></svg>Coluna de graute extra</button>
+    <button data-tool="cut"><svg class="ic" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M8.5 8.5L20 20"/></svg>Cortar parede em dois trechos</button>
     <button data-tool="erase"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13"/></svg>Apagar elemento</button>
     <button data-act="dupFloor"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg>Duplicar pavimento</button>
     <button data-act="delFloor"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M6 7l1 13h10l1-13"/></svg>Remover pavimento</button>
@@ -470,7 +472,7 @@ const defaults=()=>({
   settings:{preset:'12.5x25',brickW:12.5,brickL:25,course:7,wallH:280,grout:100,wallT:12.5,loss:5,belt:true,slab:true,price:{brick:1.6,half:1.1,canal:2.2,groutL:0.9,rebarM:6.5,glue:38,day:420}},
   floors:[newFloor('Térreo')], floor:0
 });
-function newFloor(name){ return {name,walls:[],openings:[],rooms:[],texts:[],furniture:[],columns:[],services:[],conduits:[],overrides:{},bg:null}; }
+function newFloor(name){ return {name,walls:[],openings:[],rooms:[],texts:[],furniture:[],columns:[],services:[],conduits:[],overrides:{},bg:null,slabDir:'none'}; }
 let S=defaults(), nextId=1, dirty=false;
 let history=[], future=[];
 const uid=()=>nextId++;
@@ -575,8 +577,10 @@ function draw(){
   if(drag&&drag.kind==='calib'){ const [ax,ay]=toScr(drag.x1,drag.y1),[bx,by]=toScr(mouse[0],mouse[1]); ctx.strokeStyle=css('--warn'); ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); ctx.beginPath(); ctx.arc(ax,ay,5,0,7); ctx.stroke(); label((ax+bx)/2,(ay+by)/2-12,'2.º ponto: clique no fim da medida conhecida',css('--warn')); }
   // ambientes
   if(show.rooms) for(const r of f.rooms){ const [sx,sy]=toScr(r.x,r.y); ctx.fillStyle=css('--clay'); ctx.globalAlpha=.07; ctx.fillRect(sx,sy,r.w*cam.z,r.h*cam.z); ctx.globalAlpha=1; ctx.fillStyle=css('--ink2'); ctx.font=`600 ${Math.max(11,12*cam.z/1.4)}px Inter`; ctx.textAlign='center'; ctx.fillText(r.name,sx+r.w*cam.z/2,sy+r.h*cam.z/2-4); ctx.font=`${Math.max(10,11*cam.z/1.4)}px Inter`; ctx.fillText(fmt(roomPolygonArea(r),2)+' m²',sx+r.w*cam.z/2,sy+r.h*cam.z/2+12); }
+  // direção das vigotas
+  if(f.slabDir&&f.slabDir!=='none'&&f.walls.length){ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const w of f.walls){x0=Math.min(x0,w.x1,w.x2);y0=Math.min(y0,w.y1,w.y2);x1=Math.max(x1,w.x1,w.x2);y1=Math.max(y1,w.y1,w.y2);} ctx.save(); ctx.strokeStyle=css('--ink3'); ctx.globalAlpha=.35; ctx.setLineDash([10,8]); ctx.lineWidth=1; const step=100; if(f.slabDir==='h'){ for(let y=y0+step/2;y<y1;y+=step){ const [ax,ay]=toScr(x0+30,y),[bx]=toScr(x1-30,y); ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,ay); ctx.stroke(); } } else { for(let x=x0+step/2;x<x1;x+=step){ const [ax,ay]=toScr(x,y0+30),[,by]=toScr(x,y1-30); ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax,by); ctx.stroke(); } } ctx.restore(); }
   // mobiliário
-  for(const m of f.furniture){ const [sx,sy]=toScr(m.x,m.y); ctx.fillStyle=css('--surface'); ctx.fillRect(sx,sy,m.w*cam.z,m.h*cam.z); ctx.strokeStyle=css('--ink3'); ctx.lineWidth=1.2; ctx.setLineDash([]); ctx.strokeRect(sx,sy,m.w*cam.z,m.h*cam.z); if(/cama|banheira/i.test(m.name)){ ctx.strokeRect(sx+4,sy+4,m.w*cam.z-8,Math.min(m.w,m.h)*cam.z*.25); } if(/mesa/i.test(m.name)){ ctx.beginPath(); ctx.ellipse(sx+m.w*cam.z/2,sy+m.h*cam.z/2,m.w*cam.z*.35,m.h*cam.z*.35,0,0,7); ctx.stroke(); } if(/vaso|lavat|pia/i.test(m.name)){ ctx.beginPath(); ctx.ellipse(sx+m.w*cam.z/2,sy+m.h*cam.z/2,m.w*cam.z*.3,m.h*cam.z*.3,0,0,7); ctx.stroke(); } if(/box|chuveiro/i.test(m.name)){ ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx+m.w*cam.z,sy+m.h*cam.z); ctx.moveTo(sx+m.w*cam.z,sy); ctx.lineTo(sx,sy+m.h*cam.z); ctx.stroke(); } ctx.fillStyle=css('--ink3'); ctx.font='11px Inter'; ctx.textAlign='center'; ctx.fillText(m.name,sx+m.w*cam.z/2,sy+m.h*cam.z/2+4); if(sel&&sel.obj===m){ctx.strokeStyle=css('--clay');ctx.lineWidth=2;ctx.strokeRect(sx-3,sy-3,m.w*cam.z+6,m.h*cam.z+6);} }
+  for(const m of f.furniture){ const [sx,sy]=toScr(m.x,m.y); ctx.fillStyle=m.color||'#e8d5c0'; ctx.globalAlpha=.55; ctx.fillRect(sx,sy,m.w*cam.z,m.h*cam.z); ctx.globalAlpha=1; ctx.strokeStyle=css('--ink3'); ctx.lineWidth=1.2; ctx.setLineDash([]); ctx.strokeRect(sx,sy,m.w*cam.z,m.h*cam.z); if(/cama|banheira/i.test(m.name)){ ctx.strokeRect(sx+4,sy+4,m.w*cam.z-8,Math.min(m.w,m.h)*cam.z*.25); } if(/mesa/i.test(m.name)){ ctx.beginPath(); ctx.ellipse(sx+m.w*cam.z/2,sy+m.h*cam.z/2,m.w*cam.z*.35,m.h*cam.z*.35,0,0,7); ctx.stroke(); } if(/vaso|lavat|pia/i.test(m.name)){ ctx.beginPath(); ctx.ellipse(sx+m.w*cam.z/2,sy+m.h*cam.z/2,m.w*cam.z*.3,m.h*cam.z*.3,0,0,7); ctx.stroke(); } if(/box|chuveiro/i.test(m.name)){ ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx+m.w*cam.z,sy+m.h*cam.z); ctx.moveTo(sx+m.w*cam.z,sy); ctx.lineTo(sx,sy+m.h*cam.z); ctx.stroke(); } ctx.fillStyle=css('--ink3'); ctx.font='11px Inter'; ctx.textAlign='center'; ctx.fillText(m.name,sx+m.w*cam.z/2,sy+m.h*cam.z/2+4); if(sel&&sel.obj===m){ctx.strokeStyle=css('--clay');ctx.lineWidth=2;ctx.strokeRect(sx-3,sy-3,m.w*cam.z+6,m.h*cam.z+6);} }
   // paredes
   const T=S.settings.wallT;
   for(const w of f.walls) drawWall(w,T);
@@ -593,13 +597,13 @@ function draw(){
   if(view==='services') drawServices(f);
   // medida ao vivo junto ao cursor (entrada dinâmica)
   if(drag&&drag.kind==='wall'){ const g=ghostWall(drag); const L=wallLen(g); const h=L>=MOD()?halvesOf(g):0; const [mx,my]=toScr(mouse[0],mouse[1]); const txt=cmd?('⌨ '+cmd+'_'):(fmt(L)+' cm'+(h?' · '+h+'×½':'')); label(mx+70,my-18,txt,cmd?css('--clay'):(h?css('--warn'):css('--ink'))); }
-  if((tool==='door'||tool==='window')&&cmd){ const [mx,my]=toScr(mouse[0],mouse[1]); label(mx+70,my-18,'⌨ posição '+cmd+'_ cm',css('--clay')); }
+  if((isOpenTool())&&cmd){ const [mx,my]=toScr(mouse[0],mouse[1]); label(mx+70,my-18,'⌨ posição '+cmd+'_ cm',css('--clay')); }
   // cursor
   const [cx,cy]=toScr(snap(mouse[0]),snap(mouse[1]));
   if(tool==='wall'||tool==='room'||tool==='furniture'||tool==='column'){ ctx.strokeStyle=css('--clay'); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(cx-8,cy);ctx.lineTo(cx+8,cy);ctx.moveTo(cx,cy-8);ctx.lineTo(cx,cy+8); ctx.stroke(); }
   if(tool==='furniture'&&FURN[furnSel][1]){ const f=FURN[furnSel]; const w=furnRot?f[2]:f[1],h=furnRot?f[1]:f[2]; const [ax,ay]=toScr(snap(mouse[0]),snap(mouse[1])); ctx.strokeStyle=css('--clay'); ctx.setLineDash([4,3]); ctx.strokeRect(ax,ay,w*cam.z,h*cam.z); ctx.setLineDash([]); }
   // prévia de abertura
-  if((tool==='door'||tool==='window')&&hover&&hover.w){ const w=hover.w,[dx,dy]=wallDir(w); const width=openDef[tool].w; const off=Math.max(0,Math.min(wallLen(w)-width,snap(hover.t-width/2))); const [nx,ny]=wallNormal(w); const [ax,ay]=toScr(w.x1+dx*off+nx*T/2,w.y1+dy*off+ny*T/2); ctx.strokeStyle=css('--ok'); ctx.lineWidth=T*cam.z; ctx.globalAlpha=.5; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax+dx*width*cam.z,ay+dy*width*cam.z); ctx.stroke(); ctx.globalAlpha=1; }
+  if((isOpenTool())&&hover&&hover.w){ const w=hover.w,[dx,dy]=wallDir(w); const width=openDef[tool].w; const off=Math.max(0,Math.min(wallLen(w)-width,snap(hover.t-width/2))); const [nx,ny]=wallNormal(w); const [ax,ay]=toScr(w.x1+dx*off+nx*T/2,w.y1+dy*off+ny*T/2); ctx.strokeStyle=css('--ok'); ctx.lineWidth=T*cam.z; ctx.globalAlpha=.5; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax+dx*width*cam.z,ay+dy*width*cam.z); ctx.stroke(); ctx.globalAlpha=1; }
 }
 function label(x,y,txt,color,ang){ ctx.save(); ctx.translate(x,y); if(ang)ctx.rotate(ang); ctx.font='600 11px Inter'; ctx.textAlign='center'; const w=ctx.measureText(txt).width+10; ctx.fillStyle=css('--surface'); ctx.globalAlpha=.9; ctx.fillRect(-w/2,-9,w,16); ctx.globalAlpha=1; ctx.fillStyle=color||css('--ink2'); ctx.fillText(txt,0,3); ctx.restore(); }
 function drawWall(w,T,ghost){
@@ -640,8 +644,15 @@ function drawWall(w,T,ghost){
       const yEdge=up?hb:hb+Hb; const dir=up?-1:1; const hx=(o.hinge?o.off+o.width:o.off)*cam.z, hs=o.hinge?-1:1;
       ctx.beginPath(); ctx.moveTo(hx,yEdge); ctx.lineTo(hx,yEdge+dir*o.width*cam.z); ctx.stroke();
       ctx.setLineDash([3,3]); ctx.beginPath(); const a0=up?-Math.PI/2:Math.PI/2; const a1=hs>0?0:Math.PI; ctx.arc(hx,yEdge,o.width*cam.z,Math.min(a0,a1),Math.max(a0,a1)); ctx.stroke(); ctx.setLineDash([]); }
+    for(const rb of reinfBlocks(o)){ const r=REINF[o.reinf]; const outward=(o.reinfSide||-1); const yB=outward>0?hb+Hb:hb-r.thick*cam.z; const hB=r.thick*cam.z; ctx.fillStyle=r.concrete?'#cfcac2':COL.plain; ctx.fillRect(rb.a*cam.z,yB,(rb.b-rb.a)*cam.z,hB); ctx.strokeStyle=r.concrete?'#8a857c':COL.stroke; ctx.lineWidth=1; ctx.strokeRect(rb.a*cam.z,yB,(rb.b-rb.a)*cam.z,hB);
+      if(r.concrete){ ctx.beginPath(); for(let q=rb.a*cam.z;q<rb.b*cam.z;q+=6){ ctx.moveTo(q,yB+hB); ctx.lineTo(Math.min(q+hB,rb.b*cam.z),yB+Math.max(0,hB-(rb.b*cam.z-q))); } ctx.strokeStyle='#8a857c'; ctx.stroke(); }
+      else if(cam.z>0.9){ for(let q=rb.a;q<rb.b-0.01;q+=T){ ctx.beginPath(); ctx.ellipse((q+T/2)*cam.z,yB+hB/2,T*0.27*cam.z*1.05,T*0.27*cam.z,0,0,7); ctx.fillStyle='#8c6d55'; ctx.fill(); ctx.strokeStyle='#5e4a3a'; ctx.stroke(); } }
+      // os furos da própria parede na ombreira também grauteados
+      if(cam.z>0.9){ for(let q=rb.a;q<rb.b-0.01;q+=T){ ctx.beginPath(); ctx.ellipse((q+T/2)*cam.z,hb+Hb/2,T*0.27*cam.z*1.05,T*0.27*cam.z,0,0,7); ctx.fillStyle='#8c6d55'; ctx.fill(); ctx.strokeStyle='#5e4a3a'; ctx.lineWidth=1.2; ctx.stroke(); } }
+      ctx.strokeStyle=css('--clay'); ctx.lineWidth=1; }
     const iss=openingIssues(o); if(iss.length){ ctx.strokeStyle=css('--warn'); ctx.lineWidth=2; ctx.setLineDash([4,3]); ctx.strokeRect(o.off*cam.z,hb-5,o.width*cam.z,Hb+10); ctx.setLineDash([]); }
-    else { ctx.beginPath(); ctx.moveTo(o.off*cam.z,hb+Hb*.25); ctx.lineTo((o.off+o.width)*cam.z,hb+Hb*.25); ctx.moveTo(o.off*cam.z,hb+Hb*.75); ctx.lineTo((o.off+o.width)*cam.z,hb+Hb*.75); ctx.stroke(); }
+    else if(o.type==='window'){ ctx.beginPath(); ctx.moveTo(o.off*cam.z,hb+Hb*.25); ctx.lineTo((o.off+o.width)*cam.z,hb+Hb*.25); ctx.moveTo(o.off*cam.z,hb+Hb*.75); ctx.lineTo((o.off+o.width)*cam.z,hb+Hb*.75); ctx.stroke(); }
+    else { ctx.setLineDash([3,3]); ctx.strokeStyle=css('--ink3'); ctx.beginPath(); ctx.moveTo(o.off*cam.z,hb); ctx.lineTo((o.off+o.width)*cam.z,hb); ctx.moveTo(o.off*cam.z,hb+Hb); ctx.lineTo((o.off+o.width)*cam.z,hb+Hb); ctx.stroke(); ctx.setLineDash([]); }
     if(sel&&sel.obj===o){ ctx.strokeStyle=css('--clay'); ctx.lineWidth=2; ctx.strokeRect(o.off*cam.z,hb-3,o.width*cam.z,Hb+6); }
   }
   // graute
@@ -652,11 +663,32 @@ function drawWall(w,T,ghost){
 }
 const SVC={ele:{c:'#c9a227',l:'E',n:'Elétrica'},hid:{c:'#2f7fc1',l:'H',n:'Hidráulica'},esg:{c:'#8d6a4a',l:'S',n:'Esgoto'},gas:{c:'#e07b39',l:'G',n:'Gás'}};
 let svcTool='ele';
-const FURN=[['Cama solteiro',90,190],['Cama casal',140,190],['Cama queen',160,200],['Guarda-roupa',160,55],['Criado-mudo',45,45],['Sofá 2 lugares',150,90],['Sofá 3 lugares',200,90],['Mesa 4 lugares',80,120],['Mesa 6 lugares',90,160],['Cadeira',45,45],['Mesa de trabalho',120,60],['Geladeira',70,70],['Fogão',55,60],['Pia de cozinha',120,55],['Bancada',60,100],['Máquina de lavar',60,60],['Tanque',55,55],['Vaso sanitário',40,60],['Lavatório',50,40],['Box chuveiro',90,90],['Banheira',75,160],['Livre (desenhar)',0,0]];
+const FCAT={dorm:['Dormitório','#c9b7de'],estar:['Estar / jantar','#9fc7c0'],coz:['Cozinha','#f0b88a'],banho:['Banheiro','#a9c6e3'],serv:['Serviço','#cfcac2'],ext:['Externo / garagem','#b5d19a'],livre:['Livre','#e8d5c0']};
+const FURN=[
+ ['Cama solteiro',90,190,'dorm'],['Cama casal',140,190,'dorm'],['Cama queen',160,200,'dorm'],['Cama king',193,203,'dorm'],['Beliche',90,190,'dorm'],['Berço',70,130,'dorm'],['Criado-mudo',45,45,'dorm'],['Cômoda',100,45,'dorm'],['Guarda-roupa 2 portas',120,55,'dorm'],['Guarda-roupa 4 portas',200,55,'dorm'],['Escrivaninha',120,60,'dorm'],
+ ['Sofá 2 lugares',150,90,'estar'],['Sofá 3 lugares',200,90,'estar'],['Sofá de canto',250,250,'estar'],['Poltrona',80,80,'estar'],['Mesa de centro',90,50,'estar'],['Rack TV',160,45,'estar'],['Estante',90,35,'estar'],['Mesa 4 lugares',80,120,'estar'],['Mesa 6 lugares',90,160,'estar'],['Mesa redonda 4 lug.',110,110,'estar'],['Cadeira',45,45,'estar'],['Aparador',120,40,'estar'],
+ ['Geladeira',70,70,'coz'],['Freezer',60,60,'coz'],['Fogão 4 bocas',55,60,'coz'],['Fogão 5 bocas',75,60,'coz'],['Pia de cozinha',120,55,'coz'],['Bancada',60,100,'coz'],['Armário de cozinha',160,55,'coz'],['Lava-louças',60,60,'coz'],['Micro-ondas',50,40,'coz'],['Ilha de cozinha',90,180,'coz'],
+ ['Vaso sanitário',40,60,'banho'],['Lavatório',50,40,'banho'],['Bancada de banheiro',100,50,'banho'],['Box chuveiro',90,90,'banho'],['Box 80×100',80,100,'banho'],['Banheira',75,160,'banho'],['Bidê',40,60,'banho'],
+ ['Máquina de lavar',60,60,'serv'],['Secadora',60,60,'serv'],['Tanque',55,55,'serv'],['Armário de serviço',80,55,'serv'],['Caixa d\'água 1000 L',110,110,'serv'],
+ ['Vaga de carro',250,500,'ext'],['Vaga de moto',100,220,'ext'],['Churrasqueira',80,60,'ext'],['Mesa de jardim',90,90,'ext'],['Árvore',200,200,'ext'],['Vaso de planta',40,40,'ext'],['Piscina 3×6',300,600,'ext'],
+ ['Livre (desenhar)',0,0,'livre']];
 let furnSel=0, furnRot=false;
-const openDef={door:{w:87.5,h:210,s:0},window:{w:100,h:105,s:105}};
-function syncOpenInputs(){ const d=openDef[tool]; if(!d)return; $('#opW').value=d.w; $('#opH').value=d.h; $('#opS').value=d.s; $('#opSillL').style.display=tool==='door'?'none':''; }
-function readOpenInputs(){ const d=openDef[tool]; if(!d)return; const T=S.settings.wallT,cs=S.settings.course; const w=+$('#opW').value,h=+$('#opH').value,sv=+$('#opS').value; if(w>0)d.w=Math.max(T,Math.round(w/T)*T); if(h>0)d.h=Math.max(cs,Math.round(h/cs)*cs); d.s=tool==='door'?0:Math.max(0,Math.round((sv||0)/cs)*cs); }
+const openDef={door:{w:87.5,h:210,s:0},window:{w:100,h:105,s:105},passage:{w:150,h:210,s:0}};
+
+const isOpenTool=()=>tool==='door'||tool==='window'||tool==='passage';
+const OPN={door:'Porta',window:'Janela',passage:'Passagem'};
+/* reforços de lateral de vão: bloco extra encostado à parede em cada ombreira */
+const REINF={
+  none:{n:'Nenhum (coluna grauteada no furo da ombreira)',len:0,thick:0,holes:0,bars:0,bar:10,bricks:0},
+  pilarete:{n:'Pilarete 25×25 · dupla fiada · 4 barras Ø10',len:25,thick:12.5,holes:4,bars:4,bar:10,bricks:1},
+  pilar375:{n:'Pilar 37,5×25 · 6 furos · 6 barras Ø10 (cargas maiores)',len:37.5,thick:12.5,holes:6,bars:6,bar:10,bricks:1.5},
+  pilar50:{n:'Pilar 50×25 · 8 furos · 8 barras Ø12,5 (escadas, andar superior)',len:50,thick:12.5,holes:8,bars:8,bar:12.5,bricks:2},
+  concreto:{n:'Pilar de concreto 25×25 moldado · 4 barras Ø12,5 (cargas pesadas)',len:25,thick:12.5,holes:0,bars:4,bar:12.5,bricks:0,concrete:true}
+};
+/* blocos de reforço de um vão: [{a,b}] ao longo da parede, lado = o.reinfSide (1 = lado do corpo, -1 = oposto) */
+function reinfBlocks(o){ const r=REINF[o.reinf||'none']; if(!r.len)return []; const w=wallById(o.wall); if(!w)return []; const L=wallLen(w); return [{a:Math.max(0,o.off-r.len),b:o.off},{a:o.off+o.width,b:Math.min(L,o.off+o.width+r.len)}].filter(b=>b.b-b.a>0.1); }
+function syncOpenInputs(){ const d=openDef[tool]; if(!d)return; $('#opW').value=d.w; $('#opH').value=d.h; $('#opS').value=d.s; $('#opSillL').style.display=tool==='window'?'':'none'; }
+function readOpenInputs(){ const d=openDef[tool]; if(!d)return; const T=S.settings.wallT,cs=S.settings.course; const w=+$('#opW').value,h=+$('#opH').value,sv=+$('#opS').value; if(w>0)d.w=Math.max(T,Math.round(w/T)*T); if(h>0)d.h=Math.max(cs,Math.round(h/cs)*cs); d.s=tool==='window'?Math.max(0,Math.round((sv||0)/cs)*cs):0; }
 ['opW','opH','opS'].forEach(id=>{ $('#'+id).addEventListener('input',readOpenInputs); $('#'+id).addEventListener('change',()=>{ readOpenInputs(); syncOpenInputs(); }); });
 const svcById=id=>F().services.find(p=>p.id===id);
 function svcHit(x,y){ let best=null; for(const p of F().services){ const d=Math.hypot(x-p.x,y-p.y); if(d<14&&(!best||d<best.d))best={p,d}; } return best&&best.p; }
@@ -700,11 +732,13 @@ cv.addEventListener('pointerdown',e=>{
   }
   if(tool==='wall'){ if(drag&&drag.kind==='wall'&&drag.sticky){ finishWall(drag); return; } const alts=snapCandidates(sx,sy); drag={kind:'wall',x1:alts[0][0],y1:alts[0][1],x2:alts[0][0],y2:alts[0][1],alts,t0:Date.now()}; cmd=''; setPrompt('Parede: mova e clique no fim, ou digite o comprimento (ex.: 300, @300,0) e Enter · Esc termina'); }
   else if(tool==='measure'){ drag={kind:'measure',x1:x,y1:y,x2:x,y2:y}; }
-  else if(tool==='furniture'&&FURN[furnSel][1]){ const f=FURN[furnSel]; const w=furnRot?f[2]:f[1],h=furnRot?f[1]:f[2]; pushHistory(); F().furniture.push({id:uid(),x:sx,y:sy,w,h,name:f[0]}); draw(); }
+  else if(tool==='furniture'&&FURN[furnSel][1]){ const f=FURN[furnSel]; const w=furnRot?f[2]:f[1],h=furnRot?f[1]:f[2]; pushHistory(); F().furniture.push({id:uid(),x:sx,y:sy,w,h,name:f[0],color:FCAT[f[3]][1]}); draw(); }
   else if(tool==='room'||tool==='furniture'){ drag={kind:tool,x1:sx,y1:sy,x2:sx,y2:sy}; }
-  else if(tool==='door'||tool==='window'){ readOpenInputs(); const h=hitTest(x,y); if(h&&h.type==='opening'){ sel=h; drag={kind:'move',h,ox:x,oy:y,start:JSON.stringify(h.obj)}; showPanel(); draw(); return; } if(fillGap(x,y,tool))return; const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede: o vão é aberto nela. Ou clique no espaço entre dois trechos alinhados para uni-los com o vão.');return;} addOpening(nw.w,nw.t,tool); }
+  else if(isOpenTool()){ readOpenInputs(); const h=hitTest(x,y); if(h&&h.type==='opening'){ sel=h; drag={kind:'move',h,ox:x,oy:y,start:JSON.stringify(h.obj)}; showPanel(); draw(); return; } if(fillGap(x,y,tool))return; const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede: o vão é aberto nela. Ou clique no espaço entre dois trechos alinhados para uni-los com o vão.');return;} addOpening(nw.w,nw.t,tool); }
   else if(tool==='text'){ const t=prompt('Texto:'); if(t){pushHistory(); F().texts.push({id:uid(),x:sx,y:sy,text:t}); draw();} }
   else if(tool==='column'){ const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre uma parede.');return;} pushHistory(); const [dx,dy]=wallDir(nw.w); const t=snap(nw.t); F().columns.push({id:uid(),x:nw.w.x1+dx*t,y:nw.w.y1+dy*t}); draw(); }
+  else if(tool==='cut'){ const nw=nearestWall(x,y,30); if(!nw){toast('Clique sobre a parede no ponto do corte.');return;} const w=nw.w,T=S.settings.wallT,L=wallLen(w); const t=snap(nw.t); if(t<T||t>L-T){toast('Corte demasiado perto da ponta.');return;} if(F().openings.some(o=>o.wall===w.id&&o.off<t&&o.off+o.width>t)){toast('Há um vão nesse ponto; corte noutro lugar.');return;}
+    pushHistory(); const [dx,dy]=wallDir(w); const B={id:uid(),x1:w.x1+dx*t,y1:w.y1+dy*t,x2:w.x2,y2:w.y2,side:w.side||1}; w.x2=B.x1; w.y2=B.y1; for(const o of F().openings.filter(o=>o.wall===w.id&&o.off>=t)){ o.wall=B.id; o.off-=t; } const ov=F().overrides||{}; for(const k of Object.keys(ov))if(k.startsWith(w.id+':'))delete ov[k]; F().walls.push(B); toast('Parede cortada em dois trechos. Selecione um trecho e Delete para o remover, ou use Passagem para abrir um vão.'); draw(); }
   else if(tool==='erase'){ const h=hitTest(x,y); if(h){deleteObj(h);} }
   else if(tool==='select'){ const h=hitTest(x,y); sel=h; if(h){ drag={kind:'move',h,ox:x,oy:y,start:JSON.stringify(h.obj)}; } showPanel(); draw(); }
 });
@@ -726,7 +760,7 @@ cv.addEventListener('pointermove',e=>{
   }
   if(view==='services')return;
   if(tool==='calib'&&drag&&drag.kind==='calib'){ draw(); }
-  if(tool==='door'||tool==='window'){ hover=nearestWall(x,y,30); const hh=hitTest(x,y); cv.style.cursor=(hh&&hh.type==='opening')?'move':'crosshair'; if(hover){ const width=openDef[tool].w; const off=Math.max(0,Math.min(wallLen(hover.w)-width,snap(hover.t-width/2))); $('#stInfo').textContent='Posição: '+fmt(off)+' cm do início da parede'; } else $('#stInfo').textContent=''; draw(); }
+  if(isOpenTool()){ hover=nearestWall(x,y,30); const hh=hitTest(x,y); cv.style.cursor=(hh&&hh.type==='opening')?'move':'crosshair'; if(hover){ const width=openDef[tool].w; const off=Math.max(0,Math.min(wallLen(hover.w)-width,snap(hover.t-width/2))); $('#stInfo').textContent='Posição: '+fmt(off)+' cm do início da parede'; } else $('#stInfo').textContent=''; draw(); }
   else if(tool==='wall'||tool==='room'||tool==='furniture'||tool==='column') draw();
 });
 cv.addEventListener('pointerup',e=>{
@@ -787,7 +821,12 @@ function moveObj(h,dx,dy){
   else { o.x=s.x+dx; o.y=s.y+dy; }
 }
 /* verificações estruturais de um vão */
+function wallBearsSlab(w){ const d=F().slabDir; if(!d||d==='none')return false; const horiz=Math.abs(w.x2-w.x1)>=Math.abs(w.y2-w.y1); return (d==='h'&&!horiz)||(d==='v'&&horiz); }
 function openingIssues(o){ const w=wallById(o.wall); if(!w)return []; const s=S.settings, L=wallLen(w), bl=s.brickL, out=[];
+  const r=REINF[o.reinf||'none'];
+  if(o.width>120&&wallBearsSlab(w)){ if(!r.len)out.push('Verga com carga de laje (as vigotas apoiam nesta parede) e vão acima de 120 cm: use viga de concreto ou canaleta dupla com 2+2 barras de 10 mm e reforce as laterais (painel › Reforço lateral). Confirmar com engenheiro.'); else out.push('Apoio reforçado ('+r.n.split(' ·')[0]+'). Falta dimensionar a viga sobre o vão: 2 fiadas de canaleta ou viga de concreto, 2+2 Ø10 para 1,5 m com laje. Confirmar com engenheiro.'); }
+  if(r.len){ const bl2=r.len; if(o.off-bl2<0)out.push('Reforço lateral não cabe antes do vão: afaste o vão pelo menos '+fmt(bl2)+' cm do início da parede.'); if(o.off+o.width+bl2>L)out.push('Reforço lateral não cabe depois do vão: afaste o vão pelo menos '+fmt(bl2)+' cm do fim da parede.'); }
+  if(o.width>120&&F().slabDir==='none')out.push('Vão acima de 120 cm: indique em Configurações a direção das vigotas para verificar se a verga recebe carga de laje.');
   if(o.off<bl)out.push('Vão a menos de um tijolo ('+fmt(bl)+' cm) do início da parede: não há espaço para a coluna lateral e o apoio da verga.');
   if(L-(o.off+o.width)<bl)out.push('Vão a menos de um tijolo ('+fmt(bl)+' cm) do fim da parede: não há espaço para a coluna lateral e o apoio da verga.');
   for(const q of F().openings){ if(q===o||q.wall!==o.wall)continue; const gap=Math.max(q.off-(o.off+o.width),o.off-(q.off+q.width)); if(gap<0)out.push('Sobrepõe outro vão.'); else if(gap<bl)out.push('Menos de um tijolo até ao vão vizinho: as vergas não têm apoio entre eles.'); }
@@ -809,7 +848,7 @@ function fillGap(x,y,type){ const T=S.settings.wallT, f=F();
       for(const o of f.openings.filter(o=>o.wall===B.id)){ o.wall=A.id; o.off+=LA+gap; }
       A.x2=B.x2; A.y2=B.y2; f.walls=f.walls.filter(w=>w!==B);
       const d=openDef[type]; const o={id:uid(),wall:A.id,off:LA,width:gap,type,height:d.h,sill:d.s}; f.openings.push(o); sel={type:'opening',obj:o}; draw(); showPanel();
-      const iss=openingIssues(o); toast(iss.length?'⚠ '+iss[0]:'Trechos unidos numa parede e '+(type==='door'?'porta':'janela')+' de '+fmt(gap)+' cm colocada no vão.'); return true; } }
+      const iss=openingIssues(o); toast(iss.length?'⚠ '+iss[0]:'Trechos unidos numa parede e '+(OPN[type]||'Vão').toLowerCase()+' de '+fmt(gap)+' cm colocada no vão.'); return true; } }
   return false; }
 function addOpening(w,t,type){
   const d=openDef[type], width=d.w; const L=wallLen(w);
@@ -819,7 +858,7 @@ function addOpening(w,t,type){
   if(clash){toast('Já existe um vão nessa posição.');return;}
   pushHistory();
   const o={id:uid(),wall:w.id,off,width,type,height:d.h,sill:d.s};
-  F().openings.push(o); sel={type:'opening',obj:o}; draw(); showPanel(); const iss=openingIssues(o); if(iss.length)toast('⚠ '+iss[0]); else toast((type==='door'?'Porta':'Janela')+' colocada a '+fmt(off)+' cm do início da parede. Arraste para mover.');
+  F().openings.push(o); sel={type:'opening',obj:o}; draw(); showPanel(); const iss=openingIssues(o); if(iss.length)toast('⚠ '+iss[0]); else toast((OPN[type]||'Vão')+' colocada a '+fmt(off)+' cm do início da parede. Arraste para mover.');
 }
 function deleteObj(h){
   pushHistory(); const f=F();
@@ -834,7 +873,7 @@ function deleteObj(h){
 addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')return;
   // entrada dinâmica: parede em desenho ou porta/janela sobre uma parede
-  const typing=(drag&&drag.kind==='wall')||((tool==='door'||tool==='window')&&(view==='plan'));
+  const typing=(drag&&drag.kind==='wall')||((isOpenTool())&&(view==='plan'));
   if(typing&&!e.ctrlKey&&!e.metaKey){
     if(/^[0-9.,@;x|-]$/.test(e.key)){ cmd+=e.key; draw(); e.preventDefault(); return; }
     if(e.key==='Backspace'){ cmd=cmd.slice(0,-1); draw(); e.preventDefault(); return; }
@@ -853,12 +892,12 @@ addEventListener('keydown',e=>{
   if(e.key==='r'&&tool==='furniture'){furnRot=!furnRot;draw();}
   if(!(sel&&sel.type==='opening')&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){ e.preventDefault(); const st=60/cam.z; if(e.key==='ArrowLeft')cam.x-=st; if(e.key==='ArrowRight')cam.x+=st; if(e.key==='ArrowUp')cam.y-=st; if(e.key==='ArrowDown')cam.y+=st; draw(); }
   if(e.key==='+'||e.key==='='){ cam.z=Math.min(8,cam.z*1.2); draw(); } if(e.key==='-'){ cam.z=Math.max(.15,cam.z/1.2); draw(); } if(e.key==='0'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); fit(); }
-  const keys={p:'wall',d:'door',j:'window',s:'select',m:'measure',t:'text',a:'room',h:'pan'}; if(!e.ctrlKey&&!e.metaKey&&keys[e.key])setTool(keys[e.key]);
+  const keys={p:'wall',d:'door',j:'window',g:'passage',s:'select',m:'measure',t:'text',a:'room',h:'pan'}; if(!e.ctrlKey&&!e.metaKey&&keys[e.key])setTool(keys[e.key]);
 });
 addEventListener('keyup',e=>{ if(e.code==='Space'){spaceDown=false;setCursor();} });
 
 /* ---------- ferramentas / vistas ---------- */
-const hints={calib:'Calibrar imagem: clique em dois pontos com distância real conhecida e escreva a medida em cm.',bgmove:'Mover imagem: arraste a imagem de fundo até alinhar com a grade. Concluir volta à Parede.',pan:'Mão (H): arraste para deslocar a planta. Rolar também desloca; Ctrl/Cmd + rolar ou pinça faz zoom.',wall:'Parede (P): clique no início, mova e clique no fim — ou digite o comprimento (300) ou @dx,dy e Enter. Cada parede encadeia a seguinte; Enter ou Esc termina. Arrastar também funciona.',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
+const hints={passage:'Passagem: vão aberto sem porta. Defina a largura e a altura e clique na parede; a verga continua a ser necessária. (G)',cut:'Cortar: clique na parede no ponto onde a quer dividir em dois trechos (para apagar um deles ou reorganizar).',calib:'Calibrar imagem: clique em dois pontos com distância real conhecida e escreva a medida em cm.',bgmove:'Mover imagem: arraste a imagem de fundo até alinhar com a grade. Concluir volta à Parede.',pan:'Mão (H): arraste para deslocar a planta. Rolar também desloca; Ctrl/Cmd + rolar ou pinça faz zoom.',wall:'Parede (P): clique no início, mova e clique no fim — ou digite o comprimento (300) ou @dx,dy e Enter. Cada parede encadeia a seguinte; Enter ou Esc termina. Arrastar também funciona.',door:'Porta: desenhe a parede inteira e clique nela; o vão é aberto no lugar do clique. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (D)',window:'Janela: desenhe a parede inteira e clique nela; defina largura, altura e peitoril na barra. Um clique no espaço entre dois trechos alinhados une-os e usa o espaço como vão. (J)',furniture:'Mobiliário: escolha o móvel na barra e clique para colocar (R gira). "Livre" permite desenhar um retângulo.',room:'Ambiente: arraste um retângulo sobre a planta e dê um nome. (A)',select:'Selecionar: clique para editar, arraste para mover, Delete apaga. (S)',measure:'Medir: arraste entre dois pontos. (M)',text:'Texto: clique onde quer escrever. (T)',column:'Coluna de graute extra: clique sobre a parede.',erase:'Apagar: clique no elemento.'};
 function setToolHint(){ $('#hint').textContent=(hints[tool]||'')+'  ·  Rolar: deslocar · Ctrl/Cmd + rolar: zoom · Botão direito ou Espaço + arrastar: deslocar'; }
 function setTool(t){ tool=t; setCursor(); if(t==='calib')cv.style.cursor='crosshair'; if(t==='bgmove')cv.style.cursor='move'; $$('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); $('#openSize').classList.toggle('hidden',!(t==='door'||t==='window')); $('#furnPick').classList.toggle('hidden',t!=='furniture'); syncOpenInputs(); $('#hint').textContent=(hints[t]||'')+'  ·  Roda do rato: zoom · Botão direito ou Espaço: mover'; if(view!=='plan'&&view!=='services')setView('plan'); draw(); }
 $$('[data-tool]').forEach(b=>b.addEventListener('click',()=>{setTool(b.dataset.tool);closeMenus();}));
@@ -879,7 +918,7 @@ function setSvc(t){ svcTool=t; $$('#ctxServ .tb').forEach(b=>b.classList.toggle(
 $$('#ctxServ .tb').forEach(b=>b.addEventListener('click',()=>setSvc(b.dataset.svc)));
 let mode3d='tech'; $$('#ctx3d .tb').forEach(b=>b.addEventListener('click',()=>{ mode3d=b.dataset.mode3d; $$('#ctx3d .tb').forEach(x=>x.classList.toggle('on',x===b)); build3d(); }));
 let btype='auto'; $$('#ctxCourse [data-btype]').forEach(b=>b.addEventListener('click',()=>{ btype=b.dataset.btype; $$('#ctxCourse [data-btype]').forEach(x=>x.classList.toggle('on',x===b)); }));
-$('#furnSel').innerHTML=FURN.map((f,i)=>`<option value="${i}">${f[0]}${f[1]?' · '+f[1]+'×'+f[2]:''}</option>`).join(''); $('#furnSel').addEventListener('change',e=>{furnSel=+e.target.value;}); $('#furnRot').addEventListener('click',()=>{furnRot=!furnRot;draw();});
+$('#furnSel').innerHTML=Object.keys(FCAT).map(c=>`<optgroup label="${FCAT[c][0]}">`+FURN.map((f,i)=>f[3]===c?`<option value="${i}">${f[0]}${f[1]?' · '+f[1]+'×'+f[2]:''}</option>`:'').join('')+'</optgroup>').join(''); $('#furnSel').addEventListener('change',e=>{furnSel=+e.target.value;}); $('#furnRot').addEventListener('click',()=>{furnRot=!furnRot;draw();});
 $('#cwWall').addEventListener('change',e=>{ $('#sheetwrap').dataset.wall=e.target.value; renderCourses(); });
 $('#elWall').addEventListener('change',renderElevation); $('#elBricks').addEventListener('change',renderElevation); $('#elDims').addEventListener('change',renderElevation);
 function fillWallSelect(sel,idx){ const f=F(); sel.innerHTML=f.walls.map((w,i)=>`<option value="${i}" ${i===idx?'selected':''}>Parede ${i+1} · ${fmt(wallLen(w))} cm</option>`).join('')||'<option>Sem paredes</option>'; }
@@ -929,8 +968,8 @@ function showPanel(){
   const p=$('#panel'); if(!sel){p.classList.add('hidden');return;}
   p.classList.remove('hidden'); const o=sel.obj; let h='';
   if(sel.type==='wall'){ h=`<h4>Parede</h4><div class="row"><span>Comprimento</span><input id="pLen" type="number" step="12.5" value="${wallLen(o)}"></div><div class="row"><span>Lado do corpo</span><button class="btn ghost sm" id="pFlip">Inverter</button></div><div class="row"><span>Fiada par / ímpar</span><b>${courseBricks(o,false).filter(b=>!b.half).length}${courseBricks(o,false).some(b=>b.half)?'+½':''} / ${courseBricks(o,true).filter(b=>!b.half).length}${courseBricks(o,true).some(b=>b.half)?'+½':''} tij.</b></div><div class="row"><span>Módulos</span><b>${Math.round(wallLen(o)/MOD())}</b></div><div class="row"><span>Colunas de graute</span><b>${groutColumns(o).length}</b></div>`; }
-  else if(sel.type==='opening'){ h=`<h4>${o.type==='door'?'Porta':'Janela'}</h4><div class="row"><span>Largura (cm)</span><input id="pW" type="number" step="12.5" value="${o.width}"></div><div class="row"><span>Altura (cm)</span><input id="pH" type="number" step="7" value="${o.height}"></div><div class="row"><span>Peitoril (cm)</span><input id="pS" type="number" step="7" value="${o.sill}"></div><div class="row"><span>Posição (cm)</span><span style="display:flex;gap:4px;align-items:center"><button class="btn ghost sm" id="pL" title="Mover um módulo para o início">◀</button><input id="pO" type="number" step="12.5" value="${o.off}" style="width:70px"><button class="btn ghost sm" id="pR" title="Mover um módulo para o fim">▶</button></span></div>${o.type==='door'?`<div class="row"><span>Abre para</span><button class="btn ghost sm" id="pSwing">${(o.swing||1)>0?'dentro':'fora'} ⇄</button></div><div class="row"><span>Dobradiça</span><button class="btn ghost sm" id="pHinge">${o.hinge?'fim':'início'} ⇄</button></div>`:''}${(()=>{const iss=openingIssues(o);return iss.length?`<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fbeee6;color:#8a3a12;font-size:13px">⚠ ${iss.map(esc).join('<br>⚠ ')}</div>`:`<div style="margin-top:8px;color:var(--ok);font-size:13px">✓ Sem conflitos estruturais</div>`})()}`; }
-  else if(sel.type==='room'||sel.type==='furniture'){ h=`<h4>${sel.type==='room'?'Ambiente':'Mobiliário'}</h4><div class="row"><span>Nome</span><input id="pN" value="${esc(o.name)}"></div><div class="row"><span>Largura</span><input id="pRW" type="number" step="12.5" value="${o.w}"></div><div class="row"><span>Profundidade</span><input id="pRH" type="number" step="12.5" value="${o.h}"></div>${sel.type==='room'?`<div class="row"><span>Área</span><b>${fmt(roomPolygonArea(o),2)} m²</b></div>`:''}`; }
+  else if(sel.type==='opening'){ h=`<h4>${OPN[o.type]||'Vão'}</h4><div class="row"><span>Largura (cm)</span><input id="pW" type="number" step="12.5" value="${o.width}"></div><div class="row"><span>Altura (cm)</span><input id="pH" type="number" step="7" value="${o.height}"></div><div class="row"><span>Peitoril (cm)</span><input id="pS" type="number" step="7" value="${o.sill}"></div><div class="row"><span>Posição (cm)</span><span style="display:flex;gap:4px;align-items:center"><button class="btn ghost sm" id="pL" title="Mover um módulo para o início">◀</button><input id="pO" type="number" step="12.5" value="${o.off}" style="width:70px"><button class="btn ghost sm" id="pR" title="Mover um módulo para o fim">▶</button></span></div><div class="row"><span>Reforço lateral</span><select id="pReinf" style="width:150px">${Object.entries(REINF).map(([k,v])=>`<option value="${k}" ${(o.reinf||'none')===k?'selected':''}>${v.n}</option>`).join('')}</select></div>${(o.reinf&&o.reinf!=='none')?`<div class="row"><span>Lado do reforço</span><button class="btn ghost sm" id="pRSide">${(o.reinfSide||-1)>0?'lado do corpo':'lado oposto'} ⇄</button></div>`:''}${o.type==='door'?`<div class="row"><span>Abre para</span><button class="btn ghost sm" id="pSwing">${(o.swing||1)>0?'dentro':'fora'} ⇄</button></div><div class="row"><span>Dobradiça</span><button class="btn ghost sm" id="pHinge">${o.hinge?'fim':'início'} ⇄</button></div>`:''}${(()=>{const iss=openingIssues(o);return iss.length?`<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fbeee6;color:#8a3a12;font-size:13px">⚠ ${iss.map(esc).join('<br>⚠ ')}</div>`:`<div style="margin-top:8px;color:var(--ok);font-size:13px">✓ Sem conflitos estruturais</div>`})()}`; }
+  else if(sel.type==='room'||sel.type==='furniture'){ h=`<h4>${sel.type==='room'?'Ambiente':'Mobiliário'}</h4><div class="row"><span>Nome</span><input id="pN" value="${esc(o.name)}"></div><div class="row"><span>Largura</span><input id="pRW" type="number" step="12.5" value="${o.w}"></div><div class="row"><span>Profundidade</span><input id="pRH" type="number" step="12.5" value="${o.h}"></div>${sel.type==='furniture'?`<div class="row"><span>Cor</span><span style="display:flex;gap:4px;align-items:center"><input id="pCol" type="color" value="${o.color||'#e8d5c0'}" style="width:44px;padding:2px;height:30px">${Object.values(FCAT).map(c=>`<button class="btn ghost sm" data-col="${c[1]}" title="${c[0]}" style="width:22px;height:22px;padding:0;background:${c[1]};border-color:transparent"></button>`).join('')}</span></div><div class="row"><span>Girar</span><button class="btn ghost sm" id="pRotF">90° ⟳</button></div>`:''}${sel.type==='room'?`<div class="row"><span>Área</span><b>${fmt(roomPolygonArea(o),2)} m²</b></div>`:''}`; }
   else if(sel.type==='text'){ h=`<h4>Texto</h4><div class="row"><span>Conteúdo</span><input id="pT" value="${esc(o.text)}"></div>`; }
   else if(sel.type==='column'){ h=`<h4>Coluna de graute</h4><p style="color:var(--ink2);margin:0">Coluna adicional marcada manualmente.</p>`; }
   h+=`<div class="acts"><button class="btn primary sm" id="pApply">Aplicar</button><button class="btn ghost sm" id="pDel">Apagar</button></div>`;
@@ -941,10 +980,13 @@ function showPanel(){
   if($('#pL'))$('#pL').onclick=()=>nudge(-1); if($('#pR'))$('#pR').onclick=()=>nudge(1);
   if($('#pSwing'))$('#pSwing').onclick=()=>{ pushHistory(); o.swing=-(o.swing||1); draw(); showPanel(); };
   if($('#pHinge'))$('#pHinge').onclick=()=>{ pushHistory(); o.hinge=o.hinge?0:1; draw(); showPanel(); };
+  $$('#panel [data-col]').forEach(b=>b.onclick=()=>{ pushHistory(); o.color=b.dataset.col; draw(); showPanel(); }); if($('#pRotF'))$('#pRotF').onclick=()=>{ pushHistory(); [o.w,o.h]=[o.h,o.w]; draw(); showPanel(); };
+  if($('#pReinf'))$('#pReinf').onchange=e=>{ pushHistory(); o.reinf=e.target.value; draw(); showPanel(); if(view==='3d')build3d(); };
+  if($('#pRSide'))$('#pRSide').onclick=()=>{ pushHistory(); o.reinfSide=-(o.reinfSide||-1); draw(); showPanel(); if(view==='3d')build3d(); };
   $('#pApply').onclick=()=>{ pushHistory();
     if(sel.type==='wall'){ const L=snap(+$('#pLen').value); const [dx,dy]=wallDir(o); o.x2=o.x1+dx*L; o.y2=o.y1+dy*L; }
-    else if(sel.type==='opening'){ o.width=snap(+$('#pW').value)||MOD(); o.height=+$('#pH').value; o.sill=o.type==='door'?0:+$('#pS').value; const w=wallById(o.wall); o.off=Math.max(0,Math.min(wallLen(w)-o.width,snap(+$('#pO').value))); }
-    else if(sel.type==='room'||sel.type==='furniture'){ o.name=$('#pN').value; o.w=snap(+$('#pRW').value)||MOD(); o.h=snap(+$('#pRH').value)||MOD(); }
+    else if(sel.type==='opening'){ o.width=snap(+$('#pW').value)||MOD(); o.height=+$('#pH').value; o.sill=o.type==='window'?+$('#pS').value:0; const w=wallById(o.wall); o.off=Math.max(0,Math.min(wallLen(w)-o.width,snap(+$('#pO').value))); }
+    else if(sel.type==='room'||sel.type==='furniture'){ o.name=$('#pN').value; o.w=snap(+$('#pRW').value)||MOD(); o.h=snap(+$('#pRH').value)||MOD(); if($('#pCol'))o.color=$('#pCol').value; }
     else if(sel.type==='text'){ o.text=$('#pT').value; }
     draw(); showPanel(); };
 }
@@ -970,9 +1012,14 @@ function takeoff(floor){
   const rebar=tot.cols*(s.wallH+40)/100; // m, com transpasse
   const canal=rows.reduce((a,r)=>a+r.canal,0); tot.bricks=rows.reduce((a,r)=>a+r.bricks,0); const lintelLen=floor.openings.reduce((a,o)=>a+(o.width+2*s.brickL)*(o.sill>0?2:1),0)/100;
   const bricksLossR=Math.ceil(tot.bricks*(1+s.loss/100)); const halfLoss=Math.ceil(tot.half*(1+s.loss/100)), canalLoss=Math.ceil(canal*(1+s.loss/100));
-  const rebarAll=rebar+lintelLen+(s.belt?tot.len/100*2:0); const glue=Math.ceil((tot.bricks+tot.half+canal)/300);
-  const P=s.price||{}; const cost={brick:bricksLossR*(P.brick||0),half:halfLoss*(P.half||0),canal:canalLoss*(P.canal||0),grout:groutL*(P.groutL||0),rebar:rebarAll*(P.rebarM||0),glue:glue*(P.glue||0)}; const days=Math.ceil((tot.bricks+tot.half+canal)/350)+Math.ceil(tot.cols/40)+2; cost.labor=days*(P.day||0); cost.total=Object.values(cost).reduce((a,b)=>a+b,0);
-  return {rows,tot,courses,bricksLoss:bricksLossR,halfLoss,canalLoss,groutL,rebar:rebarAll,glue,canal,lintelLen,cost,days};
+  let reinfBricks=0,reinfHalf=0,reinfBars=0,reinfGroutL=0,concreteL=0,reinfList=[];
+  for(const o of floor.openings){ const r=REINF[o.reinf||'none']; if(!r.len)continue; const n=reinfBlocks(o).length; reinfList.push(r.n.split(' ·')[0]+' ×'+n);
+    if(r.concrete){ concreteL+=n*25*25*s.wallH/1000; } else { reinfBricks+=n*courses*Math.floor(r.bricks); reinfHalf+=n*courses*(r.bricks%1?1:0); reinfGroutL+=n*r.holes*Math.PI*3.25*3.25*s.wallH/1000; }
+    reinfBars+=n*r.bars*(s.wallH+40)/100; }
+  tot.bricks+=reinfBricks; tot.half+=reinfHalf; const groutL2=groutL+reinfGroutL;
+  const rebarAll=rebar+lintelLen+(s.belt?tot.len/100*2:0)+reinfBars; const glue=Math.ceil((tot.bricks+tot.half+canal)/300);
+  const P=s.price||{}; const cost={brick:bricksLossR*(P.brick||0),half:halfLoss*(P.half||0),canal:canalLoss*(P.canal||0),grout:groutL2*(P.groutL||0),concrete:concreteL*((P.concreteL)||0.7),rebar:rebarAll*(P.rebarM||0),glue:glue*(P.glue||0)}; const days=Math.ceil((tot.bricks+tot.half+canal)/350)+Math.ceil(tot.cols/40)+2; cost.labor=days*(P.day||0); cost.total=Object.values(cost).reduce((a,b)=>a+b,0);
+  return {rows,tot,courses,bricksLoss:bricksLossR,halfLoss,canalLoss,groutL:groutL2,rebar:rebarAll,glue,canal,lintelLen,cost,days,reinfList,reinfBricks,reinfBars,concreteL};
 }
 function openTakeoff(){
   const t=takeoff(F());
@@ -981,9 +1028,10 @@ function openTakeoff(){
   ${(()=>{const sv=svcSummary(F());return `<p style="color:var(--ink2);font-size:14px;margin:0 0 14px">Instalações: ${Object.keys(SVC).map(k=>`${SVC[k].n} ${sv[k].pts} ponto(s) · ${fmt(sv[k].len,1)} m`).join(' · ')}</p>`})()}
   <h4 style="margin:6px 0">Lista de peças por parede (para o pedido à fábrica)</h4>
   <div class="tbl" style="margin:0 0 16px"><table><thead><tr><th>Parede</th><th>Compr.</th><th>Fiadas</th><th>Vãos</th><th>Inteiros</th><th>Meios</th><th>Canaletas</th><th>Colunas</th><th>Área líq.</th></tr></thead><tbody>${t.rows.map(r=>`<tr><td>${r.n}</td><td>${fmt(r.L)} cm</td><td>${r.courses}</td><td>${r.ops}</td><td>${fmt(r.bricks,0)}</td><td>${fmt(r.half,0)}</td><td>${fmt(r.canal,0)}</td><td>${r.cols}</td><td>${fmt(r.area,2)} m²</td></tr>`).join('')||'<tr><td colspan="9">Nenhuma parede desenhada ainda.</td></tr>'}<tr style="font-weight:600"><td>Total c/ ${S.settings.loss}% perda</td><td></td><td></td><td></td><td>${fmt(t.bricksLoss,0)}</td><td>${fmt(t.halfLoss,0)}</td><td>${fmt(t.canalLoss,0)}</td><td>${t.tot.cols}</td><td></td></tr></tbody></table></div>
+  ${t.reinfList.length?`<p style="color:var(--ink2);font-size:14px;margin:0 0 14px">Reforços de ombreira: ${t.reinfList.join(', ')} · +${fmt(t.reinfBricks,0)} tijolos e +${fmt(t.reinfBars,1)} m de aço (já incluídos).</p>`:''}
   <h4 style="margin:6px 0">Orçamento estimado (preços em Configurações)</h4>
   <div class="tbl" style="margin:0"><table><thead><tr><th>Item</th><th>Quantidade</th><th>Custo</th></tr></thead><tbody>
-  <tr><td>Tijolos inteiros</td><td>${fmt(t.bricksLoss,0)} un.</td><td>${brl(t.cost.brick)}</td></tr><tr><td>Meios tijolos</td><td>${fmt(t.halfLoss,0)} un.</td><td>${brl(t.cost.half)}</td></tr><tr><td>Canaletas</td><td>${fmt(t.canalLoss,0)} un.</td><td>${brl(t.cost.canal)}</td></tr><tr><td>Graute</td><td>${fmt(t.groutL,0)} L</td><td>${brl(t.cost.grout)}</td></tr><tr><td>Aço (colunas, vergas, cinta)</td><td>${fmt(t.rebar,1)} m</td><td>${brl(t.cost.rebar)}</td></tr><tr><td>Cola</td><td>${t.glue} baldes</td><td>${brl(t.cost.glue)}</td></tr><tr><td>Mão de obra</td><td>${t.days} dias</td><td>${brl(t.cost.labor)}</td></tr><tr style="font-weight:700"><td>Total</td><td></td><td>${brl(t.cost.total)}</td></tr></tbody></table></div>
+  <tr><td>Tijolos inteiros</td><td>${fmt(t.bricksLoss,0)} un.</td><td>${brl(t.cost.brick)}</td></tr><tr><td>Meios tijolos</td><td>${fmt(t.halfLoss,0)} un.</td><td>${brl(t.cost.half)}</td></tr><tr><td>Canaletas</td><td>${fmt(t.canalLoss,0)} un.</td><td>${brl(t.cost.canal)}</td></tr><tr><td>Graute</td><td>${fmt(t.groutL,0)} L</td><td>${brl(t.cost.grout)}</td></tr><tr><td>Aço (colunas, vergas, cinta)</td><td>${fmt(t.rebar,1)} m</td><td>${brl(t.cost.rebar)}</td></tr><tr><td>Cola</td><td>${t.glue} baldes</td><td>${brl(t.cost.glue)}</td></tr>${t.concreteL?`<tr><td>Concreto dos pilares</td><td>${fmt(t.concreteL,0)} L</td><td>${brl(t.cost.concrete)}</td></tr>`:''}<tr><td>Mão de obra</td><td>${t.days} dias</td><td>${brl(t.cost.labor)}</td></tr><tr style="font-weight:700"><td>Total</td><td></td><td>${brl(t.cost.total)}</td></tr></tbody></table></div>
   <div class="foot"><button class="btn ghost" id="tkCsv">Baixar CSV</button><button class="btn primary" data-close>Fechar</button></div>`);
   $('#tkCsv').onclick=()=>download('quantitativo.csv','Parede;Comprimento cm;Fiadas;Vãos;Inteiros;Meios;Canaletas;Colunas;Área m²\n'+t.rows.map(r=>[r.n,r.L,r.courses,r.ops,r.bricks,r.half,r.canal,r.cols,r.area.toFixed(2)].join(';')).join('\n')+'\n\nItem;Quantidade;Custo R$\nTijolos;'+t.bricksLoss+';'+t.cost.brick.toFixed(2)+'\nMeios;'+t.halfLoss+';'+t.cost.half.toFixed(2)+'\nCanaletas;'+t.canalLoss+';'+t.cost.canal.toFixed(2)+'\nGraute L;'+t.groutL.toFixed(0)+';'+t.cost.grout.toFixed(2)+'\nAço m;'+t.rebar.toFixed(1)+';'+t.cost.rebar.toFixed(2)+'\nCola baldes;'+t.glue+';'+t.cost.glue.toFixed(2)+'\nMão de obra dias;'+t.days+';'+t.cost.labor.toFixed(2)+'\nTotal;;'+t.cost.total.toFixed(2));
 }
@@ -1008,7 +1056,8 @@ function renderCourses(){
       if(!inOp||ov){ const partial=ov?ov==='meio':b.half; const lk=ov?null:lintelKind(ops,x0,x1,zBot,zTop); const k=lk||(ov?null:brickKind(colsK,x0,x1,L)); let fill=partial&&!lk?COL.half:(lk?COL[lk]:COL.plain); if(ov==='canaleta')fill=COL.lintel; if(ov==='graute')fill=COL.grout; if(ov==='vazio')fill='none'; const canal=(lk||ov==='canaleta'); const tip=ov?('Editado: '+ov):lk==='belt'?'Cinta de amarração: fiada de canaletas grauteada e armada no topo':lk==='lintel'?'Verga: tijolo canaleta grauteado e armado':lk==='sill'?'Contraverga: tijolo canaleta grauteado e armado':partial?'Meio tijolo (peça de fábrica, sem corte)':k==='corner'?'Tijolo de canto / encontro de paredes: recebe graute e aço':k==='grout'?'Tijolo com coluna de graute':'Tijolo inteiro'; svg+=`<rect class="ed" data-key="${key}" x="${30+x0*sc}" y="${y}" width="${(x1-x0)*sc-0.6}" height="${s.course*sc-0.6}" fill="${fill}" stroke="${COL.stroke}" stroke-width=".5" ${partial||ov==='vazio'?'stroke-dasharray="2 2"':''}><title>${tip}</title></rect>`; if(canal)svg+=`<rect x="${30+x0*sc+1}" y="${y+s.course*sc*0.3}" width="${(x1-x0)*sc-2.6}" height="${s.course*sc*0.4}" rx="1" fill="${lk==='sill'?'#9fb9d0':lk==='belt'?'#b9ad8a':'#a99bc4'}" opacity=".7" pointer-events="none"/>`; }
     } }
   }
-  for(const o of ops){ svg+=`<rect x="${30+o.off*sc}" y="${20+(s.wallH-o.sill-o.height)*sc}" width="${o.width*sc}" height="${o.height*sc}" fill="none" stroke="#1b1a18" stroke-width="1.2"/><text x="${30+(o.off+o.width/2)*sc}" y="${20+(s.wallH-o.sill-o.height/2)*sc}" font-size="11" text-anchor="middle" fill="#55524c">${o.type==='door'?'Porta':'Janela'} ${fmt(o.width)}×${fmt(o.height)}</text>`; }
+  for(const o of ops){ svg+=`<rect x="${30+o.off*sc}" y="${20+(s.wallH-o.sill-o.height)*sc}" width="${o.width*sc}" height="${o.height*sc}" fill="none" stroke="#1b1a18" stroke-width="1.2"/><text x="${30+(o.off+o.width/2)*sc}" y="${20+(s.wallH-o.sill-o.height/2)*sc}" font-size="11" text-anchor="middle" fill="#55524c">${OPN[o.type]||'Vão'} ${fmt(o.width)}×${fmt(o.height)}</text>`; }
+  for(const o of ops){ const r=REINF[o.reinf||'none']; if(!r.len)continue; for(const rb of reinfBlocks(o)){ svg+=`<rect x="${30+rb.a*sc}" y="20" width="${(rb.b-rb.a)*sc}" height="${s.wallH*sc}" fill="${r.concrete?'#9a948a':'#8c6d55'}" opacity=".35" pointer-events="none"><title>${r.n}</title></rect>`; } }
   for(const [k,kind] of groutCells(w,colsK)){ svg+=`<rect x="${30+k*s.wallT*sc}" y="20" width="${s.wallT*sc}" height="${s.wallH*sc}" fill="${kind==='corner'?COL.corner:COL.grout}" opacity=".45" pointer-events="none"><title>${kind==='corner'?'Coluna de graute no canto / encontro':'Coluna de graute'}</title></rect>`; }
   for(let c=0;c<=courses;c+=5){ svg+=`<text x="26" y="${s.wallH*sc-c*s.course*sc+24}" font-size="9" text-anchor="end" fill="#8a857c">${c}</text>`; }
   svg+='</svg>';
@@ -1046,7 +1095,7 @@ function renderElevation(){
   svg+=`<rect x="${X(0)}" y="${Y(H)}" width="${L*sc}" height="${H*sc}" fill="#f1e9df" stroke="#1b1a18" stroke-width="1.5"/>`;
   if(showB){ const courses=Math.round(H/s.course); for(let c=0;c<courses;c++){ for(const b of courseBricks(w,c%2===1)){ const zB=c*s.course,zT=zB+s.course; if(ops.some(o=>b.a<o.off+o.width&&b.b>o.off&&zT>o.sill&&zB<o.sill+o.height))continue; svg+=`<rect x="${X(b.a)}" y="${Y(zT)}" width="${(b.b-b.a)*sc-.4}" height="${s.course*sc-.4}" fill="none" stroke="#b89a78" stroke-width=".4"/>`; } } }
   if(s.belt)svg+=`<rect x="${X(0)}" y="${Y(H)}" width="${L*sc}" height="${s.course*sc}" fill="#b9ad8a" fill-opacity=".45"><title>Cinta de amarração</title></rect>`;
-  for(const o of ops){ svg+=`<rect x="${X(o.off)}" y="${Y(o.sill+o.height)}" width="${o.width*sc}" height="${o.height*sc}" fill="#fff" stroke="#1b1a18" stroke-width="1.2"/>`; if(o.type==='window')svg+=`<line x1="${X(o.off)}" y1="${Y(o.sill+o.height)}" x2="${X(o.off+o.width)}" y2="${Y(o.sill)}" stroke="#8a857c" stroke-width=".6"/><line x1="${X(o.off+o.width)}" y1="${Y(o.sill+o.height)}" x2="${X(o.off)}" y2="${Y(o.sill)}" stroke="#8a857c" stroke-width=".6"/>`; else svg+=`<circle cx="${X(o.off+o.width-8)}" cy="${Y(o.height/2)}" r="2" fill="#1b1a18"/>`;
+  for(const o of ops){ svg+=`<rect x="${X(o.off)}" y="${Y(o.sill+o.height)}" width="${o.width*sc}" height="${o.height*sc}" fill="#fff" stroke="#1b1a18" stroke-width="1.2"/>`; if(o.type==='window')svg+=`<line x1="${X(o.off)}" y1="${Y(o.sill+o.height)}" x2="${X(o.off+o.width)}" y2="${Y(o.sill)}" stroke="#8a857c" stroke-width=".6"/><line x1="${X(o.off+o.width)}" y1="${Y(o.sill+o.height)}" x2="${X(o.off)}" y2="${Y(o.sill)}" stroke="#8a857c" stroke-width=".6"/>`; else if(o.type==='door')svg+=`<circle cx="${X(o.off+o.width-8)}" cy="${Y(o.height/2)}" r="2" fill="#1b1a18"/>`;
     // verga e contraverga
     svg+=`<rect x="${X(o.off-s.brickL)}" y="${Y(o.sill+o.height+s.course)}" width="${(o.width+2*s.brickL)*sc}" height="${s.course*sc}" fill="#7b5fa6" fill-opacity=".35"/>`; if(o.sill>0)svg+=`<rect x="${X(o.off-s.brickL)}" y="${Y(o.sill)}" width="${(o.width+2*s.brickL)*sc}" height="${s.course*sc}" fill="#3f7fb8" fill-opacity=".35"/>`;
     if(dims){ svg+=dimH(X(o.off),X(o.off+o.width),Y(o.sill+o.height)-10,fmt(o.width)); svg+=dimV(X(o.off+o.width)+12,Y(o.sill+o.height),Y(o.sill),fmt(o.height)); if(o.sill>0)svg+=dimV(X(o.off+o.width)+12,Y(o.sill),Y(0),fmt(o.sill)); } }
@@ -1067,9 +1116,10 @@ function planSVG(f,size=760){
   let s=`<svg viewBox="${x0-pad} ${y0-pad} ${W} ${H}" style="width:100%;max-width:${size}px;display:block;background:#fff">`;
   for(const r of f.rooms) s+=`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="#f3ebe0"/><text x="${r.x+r.w/2}" y="${r.y+r.h/2}" font-size="12" text-anchor="middle" fill="#55524c">${esc(r.name)} · ${fmt(roomPolygonArea(r),2)} m²</text>`;
   for(const w of f.walls){ const [dx,dy]=wallDir(w),L=wallLen(w),a=Math.atan2(dy,dx)*180/Math.PI; const yT=(w.side||1)>0?0:-T; s+=`<g transform="translate(${w.x1},${w.y1}) rotate(${a})"><rect x="0" y="${yT}" width="${L}" height="${T}" fill="#e8d5c0" stroke="#1b1a18" stroke-width="1"/>`; const cls=wallColumns(w); for(const b of courseBricks(w,false)){ s+=`<rect x="${b.a}" y="${yT}" width="${b.b-b.a}" height="${T}" fill="${b.half?COL.half:COL.plain}" stroke="${COL.stroke}" stroke-width=".5"/>`; } for(const [k,kind] of groutCells(w,cls)){ s+=`<circle cx="${(k+0.5)*T}" cy="${yT+T/2}" r="${T*0.27}" fill="${COL[kind]}"/>`; }
+    for(const o of f.openings.filter(o=>o.wall===w.id)){ const r=REINF[o.reinf||'none']; if(r.len){ for(const rb of reinfBlocks(o)){ const side=(o.reinfSide||-1); s+=`<rect x="${rb.a}" y="${side>0?yT+T:yT-r.thick}" width="${rb.b-rb.a}" height="${r.thick}" fill="${r.concrete?'#cfcac2':'#d9bf9f'}" stroke="#1b1a18" stroke-width=".8"/>`; } } }
     for(const o of f.openings.filter(o=>o.wall===w.id)) s+=`<rect x="${o.off}" y="${yT-1}" width="${o.width}" height="${T+2}" fill="#fff"/>${o.type==='door'?`<path d="M${o.off} ${yT} v${-o.width} A${o.width} ${o.width} 0 0 1 ${o.off+o.width} ${yT}" fill="none" stroke="#1b1a18" stroke-dasharray="3 3"/>`:`<line x1="${o.off}" y1="${yT+T/2}" x2="${o.off+o.width}" y2="${yT+T/2}" stroke="#1b1a18"/>`}`;
     s+=`<text x="${L/2}" y="${yT-6}" font-size="10" text-anchor="middle" fill="#55524c">${fmt(L)}</text></g>`; }
-  for(const m of f.furniture) s+=`<rect x="${m.x}" y="${m.y}" width="${m.w}" height="${m.h}" fill="none" stroke="#8a857c"/>`;
+  for(const m of f.furniture) s+=`<rect x="${m.x}" y="${m.y}" width="${m.w}" height="${m.h}" fill="${m.color||'#e8d5c0'}" fill-opacity=".5" stroke="#8a857c"/><text x="${m.x+m.w/2}" y="${m.y+m.h/2+3}" font-size="8" text-anchor="middle" fill="#55524c">${esc(m.name)}</text>`;
   return s+'</svg>';
 }
 function renderSheet(){
@@ -1087,7 +1137,7 @@ function openAnalysis(){
   // verificações extra
   const s=S.settings; if(Math.abs(s.wallH/s.course-Math.round(s.wallH/s.course))>0.01)notes.push(`Pé-direito de ${fmt(s.wallH)} cm não é múltiplo da fiada (${fmt(s.course)} cm): a última fiada ficará cortada. Use ${fmt(Math.round(s.wallH/s.course)*s.course)} cm.`);
   f.walls.forEach((w,i)=>{ if(!junction(w,false)&&!junction(w,true))notes.push(`Parede ${i+1} solta: não encosta em nenhuma outra (sem amarração).`); if(halvesOf(w))notes.push(`Parede ${i+1}: ${halvesOf(w)} meio(s) tijolo por par de fiadas; se possível ajuste o comprimento em ±${fmt(s.wallT)} cm.`); });
-  f.openings.forEach(o=>openingIssues(o).forEach(m=>{ const w=wallById(o.wall); notes.push(`Parede ${f.walls.indexOf(w)+1}, ${o.type==='door'?'porta':'janela'} a ${fmt(o.off)} cm: ${m}`); }));
+  f.openings.forEach(o=>openingIssues(o).forEach(m=>{ const w=wallById(o.wall); notes.push(`Parede ${f.walls.indexOf(w)+1}, ${(OPN[o.type]||'vão').toLowerCase()} a ${fmt(o.off)} cm: ${m}`); }));
   for(const r of f.rooms){ const hasDoor=f.openings.some(o=>{ const w=wallById(o.wall); if(!w||o.type!=='door')return false; const [dx,dy]=wallDir(w); const x=w.x1+dx*(o.off+o.width/2),y=w.y1+dy*(o.off+o.width/2); return x>=r.x-15&&x<=r.x+r.w+15&&y>=r.y-15&&y<=r.y+r.h+15; }); if(!hasDoor)notes.push(`Ambiente "${r.name}" sem porta nas suas paredes.`); if(roomPolygonArea(r)<4)notes.push(`Ambiente "${r.name}" com menos de 4 m².`); }
   const ratio=t.tot.openArea/(t.tot.area||1);
   modal(`<h3>Análise do projeto</h3><p class="lead">Verificações automáticas do pavimento ${esc(f.name)}.</p>
@@ -1121,6 +1171,7 @@ function openSettings(){
   <div class="row"><span>Perda de tijolos (%)</span><input id="cL" type="number" step="1" value="${s.loss}"></div>
   <div class="row"><span>Cinta de amarração no topo (fiada de canaletas)</span><input id="cBelt" type="checkbox" ${s.belt?'checked':''} style="width:auto"></div>
   <div class="row"><span>Laje no 3D</span><input id="cSlab" type="checkbox" ${s.slab?'checked':''} style="width:auto"></div>
+  <div class="row"><span>Direção das vigotas (pavimento ${esc(F().name)})</span><select id="cSlabDir"><option value="none" ${F().slabDir==='none'?'selected':''}>Não definida</option><option value="h" ${F().slabDir==='h'?'selected':''}>Horizontal (apoiam nas paredes verticais)</option><option value="v" ${F().slabDir==='v'?'selected':''}>Vertical (apoiam nas paredes horizontais)</option></select></div>
   <h4 style="margin:16px 0 4px;font-size:14px">Preços para o orçamento (R$)</h4>
   <div class="row"><span>Tijolo inteiro (un.)</span><input id="cPb" type="number" step="0.05" value="${s.price.brick}"></div>
   <div class="row"><span>Meio tijolo (un.)</span><input id="cPh" type="number" step="0.05" value="${s.price.half}"></div>
@@ -1128,15 +1179,16 @@ function openSettings(){
   <div class="row"><span>Graute (litro)</span><input id="cPg" type="number" step="0.05" value="${s.price.groutL}"></div>
   <div class="row"><span>Aço (metro)</span><input id="cPr" type="number" step="0.05" value="${s.price.rebarM}"></div>
   <div class="row"><span>Cola (balde)</span><input id="cPl" type="number" step="0.5" value="${s.price.glue}"></div>
+  <div class="row"><span>Concreto (litro)</span><input id="cPcon" type="number" step="0.05" value="${s.price.concreteL||0.7}"></div>
   <div class="row"><span>Mão de obra (dia da equipe)</span><input id="cPd" type="number" step="10" value="${s.price.day}"></div>
   <div class="foot"><button class="btn ghost" data-close>Cancelar</button><button class="btn primary" id="cOk">Aplicar</button></div>`);
-  $('#cOk').onclick=()=>{ pushHistory(); const pr=PRESETS[$('#cP').value]; const changed=$('#cP').value!==s.preset; s.preset=$('#cP').value; s.brickW=pr.brickW; s.brickL=pr.brickL; s.course=changed?pr.course:(+$('#cC').value||pr.course); if(changed)remodulate(); s.wallH=+$('#cH').value||280; s.grout=+$('#cG').value||100; s.loss=+$('#cL').value||0; s.belt=$('#cBelt').checked; s.slab=$('#cSlab').checked; const P=s.price; P.brick=+$('#cPb').value||0; P.half=+$('#cPh').value||0; P.canal=+$('#cPc').value||0; P.groutL=+$('#cPg').value||0; P.rebarM=+$('#cPr').value||0; P.glue=+$('#cPl').value||0; P.day=+$('#cPd').value||0; s.wallT=s.brickW; closeModal(); afterLoad(); };
+  $('#cOk').onclick=()=>{ pushHistory(); const pr=PRESETS[$('#cP').value]; const changed=$('#cP').value!==s.preset; s.preset=$('#cP').value; s.brickW=pr.brickW; s.brickL=pr.brickL; s.course=changed?pr.course:(+$('#cC').value||pr.course); if(changed)remodulate(); s.wallH=+$('#cH').value||280; s.grout=+$('#cG').value||100; s.loss=+$('#cL').value||0; s.belt=$('#cBelt').checked; s.slab=$('#cSlab').checked; F().slabDir=$('#cSlabDir').value; const P=s.price; P.brick=+$('#cPb').value||0; P.half=+$('#cPh').value||0; P.canal=+$('#cPc').value||0; P.groutL=+$('#cPg').value||0; P.rebarM=+$('#cPr').value||0; P.glue=+$('#cPl').value||0; P.concreteL=+$('#cPcon').value||0; P.day=+$('#cPd').value||0; s.wallT=s.brickW; closeModal(); afterLoad(); };
 }
 function remodulate(){ for(const f of S.floors){ for(const w of f.walls){ w.x1=snap(w.x1);w.y1=snap(w.y1);w.x2=snap(w.x2);w.y2=snap(w.y2); if(wallLen(w)<MOD()){ const [dx,dy]=wallDir(w); w.x2=w.x1+dx*MOD(); w.y2=w.y1+dy*MOD(); } } for(const o of f.openings){ const w=wallById(o.wall); if(!w)continue; o.width=Math.max(MOD(),snap(o.width)); o.off=Math.max(0,Math.min(wallLen(w)-o.width,snap(o.off))); } for(const r of f.rooms.concat(f.furniture)){ r.x=snap(r.x);r.y=snap(r.y);r.w=Math.max(MOD(),snap(r.w));r.h=Math.max(MOD(),snap(r.h)); } } toast('Desenho reajustado ao módulo de '+fmt(MOD())+' cm.'); }
 function openTutorial(){
   modal(`<h3>Como usar o editor</h3><ol style="color:var(--ink2);padding-left:20px;line-height:1.8">
   <li><b>Parede</b>: clique no início, mova e clique no fim; ou digite o comprimento (ex.: <b>300</b>) ou coordenadas relativas (<b>@300,0</b>) e Enter. A parede seguinte começa automaticamente no fim da anterior; Enter ou Esc termina a cadeia. Com Porta/Janela, digite a distância ao início da parede e Enter para posicionar com exatidão. As paredes são ortogonais e a grade é de meio tijolo. Comece uma parede na ponta de outra para amarrar o canto: as fiadas pares e ímpares alternam quem ocupa a célula do canto, e o comprimento é ajustado para fechar em tijolos inteiros (a cota mostra os tijolos de cada fiada). Se o corpo ficar do lado errado, selecione a parede e use "Inverter".</li>
-  <li><b>Porta / Janela</b>: clique sobre uma parede. Ajuste largura, altura e peitoril no painel à direita.</li>
+  <li><b>Porta / Janela / Passagem</b>: desenhe primeiro as paredes fechadas e depois clique nelas para abrir os vãos; é a ordem prevista. A Passagem cria um vão aberto sem porta. Para apagar um trecho de parede, use Mais › Cortar parede e depois Delete no trecho.</li>
   <li><b>Ambientes</b>: arraste um retângulo para nomear e medir a área.</li>
   <li><b>Fiadas</b>: veja a elevação parede a parede, com cada tijolo, os vãos e as colunas de graute. Escolha um tipo na barra (Canaleta, Graute, Meio, Vazio) e clique no tijolo para editar peça a peça.</li>
   <li><b>3D</b>: arraste para orbitar, roda do rato para aproximar. Modos Técnico, Raio-X (mostra colunas de graute e aço dentro das paredes) e Vitrine.</li>
@@ -1192,7 +1244,7 @@ let toastT; function toast(m){ const t=$('#toast'); t.textContent=m; t.classList
 /* ---------- persistência ---------- */
 const LS='fiadacad:projects';
 function serialize(){ const c=JSON.parse(JSON.stringify(S)); c.floors.forEach(f=>{ if(f.bg)f.bg={x:f.bg.x,y:f.bg.y,w:f.bg.w,h:f.bg.h,src:f.bg.src,opacity:f.bg.opacity}; }); c.nextId=nextId; return c; }
-function loadState(obj){ S=Object.assign(defaults(),obj); if(!S.settings.wallT)S.settings.wallT=S.settings.brickW; if(S.settings.belt===undefined)S.settings.belt=true; if(S.settings.slab===undefined)S.settings.slab=true; S.settings.price=Object.assign({brick:1.6,half:1.1,canal:2.2,groutL:0.9,rebarM:6.5,glue:38,day:420},S.settings.price||{}); for(const f of S.floors)for(const w of f.walls)if(!w.side)w.side=1; if(!S.settings.preset)S.settings.preset=S.settings.brickL===30?'15x30':'12.5x25'; nextId=obj.nextId||1; S.floors.forEach(f=>{ ['walls','openings','rooms','texts','furniture','columns','services','conduits'].forEach(k=>f[k]=f[k]||[]); f.overrides=f.overrides||{}; if(f.bg&&f.bg.src){ const im=new Image(); im.onload=draw; im.src=f.bg.src; f.bg.img=im; } }); history=[];future=[]; setDirty(false); afterLoad(); fit(); }
+function loadState(obj){ S=Object.assign(defaults(),obj); if(!S.settings.wallT)S.settings.wallT=S.settings.brickW; if(S.settings.belt===undefined)S.settings.belt=true; if(S.settings.slab===undefined)S.settings.slab=true; S.settings.price=Object.assign({brick:1.6,half:1.1,canal:2.2,groutL:0.9,rebarM:6.5,glue:38,day:420},S.settings.price||{}); for(const f of S.floors)for(const w of f.walls)if(!w.side)w.side=1; if(!S.settings.preset)S.settings.preset=S.settings.brickL===30?'15x30':'12.5x25'; nextId=obj.nextId||1; S.floors.forEach(f=>{ ['walls','openings','rooms','texts','furniture','columns','services','conduits'].forEach(k=>f[k]=f[k]||[]); f.overrides=f.overrides||{}; f.slabDir=f.slabDir||'none'; if(f.bg&&f.bg.src){ const im=new Image(); im.onload=draw; im.src=f.bg.src; f.bg.img=im; } }); history=[];future=[]; setDirty(false); afterLoad(); fit(); }
 function getProjects(){ try{ return JSON.parse(localStorage.getItem(LS)||'[]'); }catch(e){ return []; } }
 function saveProject(){
   const list=getProjects(); const data=serialize(); data.savedAt=Date.now(); S.id=S.id||('p'+Date.now()); data.id=S.id;
@@ -1285,6 +1337,7 @@ function build3d(){
       const segs=[]; let t=0;
       for(const o of ops){ if(o.off>t)segs.push({a:t,b:o.off,y0:0,y1:H}); if(o.sill>0)segs.push({a:o.off,b:o.off+o.width,y0:0,y1:o.sill}); const top=o.sill+o.height; if(top<H)segs.push({a:o.off,b:o.off+o.width,y0:top,y1:H}); t=o.off+o.width; }
       if(t<L)segs.push({a:t,b:L,y0:0,y1:H});
+      for(const o of ops){ const r=REINF[o.reinf||'none']; if(!r.len)continue; for(const rb of reinfBlocks(o)){ const len=rb.b-rb.a; const side=(o.reinfSide||-1); const geo=new THREE.BoxGeometry(len,H,r.thick); const m=new THREE.Mesh(geo,r.concrete?new THREE.MeshStandardMaterial({color:0xb9b4ab}):(mode3d==='xray'?brickMat:new THREE.MeshStandardMaterial({color:0xd9bf9f,roughness:.9}))); const offN=side>0?T+r.thick/2:-r.thick/2; m.position.set(w.x1+dx*(rb.a+len/2)+nx*offN,z0+H/2,w.y1+dy*(rb.a+len/2)+ny*offN); m.rotation.y=ang; R3.add(m); if(mode3d==='xray'){ for(let i=0;i<r.bars;i++){ const q=rb.a+T/2+(i%Math.max(1,Math.round(len/T)))*T; const rowN=(i<Math.round(len/T))?offN:T/2; const rbm=new THREE.Mesh(new THREE.CylinderGeometry(.7,.7,H+30,6),rebarMat); rbm.position.set(w.x1+dx*q+nx*rowN,z0+H/2+15,w.y1+dy*q+ny*rowN); R3.add(rbm); } } } }
       if(mode3d==='xray'){ for(const c of wallColumns(w)){ const tc=Math.min(L-T/2,Math.max(T/2,c.t)); const cyl=new THREE.Mesh(new THREE.CylinderGeometry(3.2,3.2,H,12),c.kind==='corner'?cornerMat:groutMat); cyl.position.set(w.x1+dx*tc+nx*T/2,z0+H/2,w.y1+dy*tc+ny*T/2); R3.add(cyl); const rb=new THREE.Mesh(new THREE.CylinderGeometry(.6,.6,H+30,6),rebarMat); rb.position.copy(cyl.position); rb.position.y+=15; R3.add(rb); } }
       for(const g of segs){ const len=g.b-g.a,h=g.y1-g.y0; if(len<=0||h<=0)continue; const geo=new THREE.BoxGeometry(len,h,T); const m=new THREE.Mesh(geo,brickMat); const cx=w.x1+dx*(g.a+len/2)+nx*T/2, cz=w.y1+dy*(g.a+len/2)+ny*T/2; m.position.set(cx,z0+g.y0+h/2,cz); m.rotation.y=ang; R3.add(m); if(mode3d!=='xray'){ const e=new THREE.LineSegments(new THREE.EdgesGeometry(geo),edge); e.position.copy(m.position); e.rotation.y=ang; R3.add(e); } }
     }
@@ -1332,6 +1385,7 @@ const TIPS={
   'data-view=sheet':'Pranchas: folha para imprimir ou gerar PDF, com planta, carimbo e quantitativo.',
   'data-tool=wall':'Parede (P): clique no início, mova e clique no fim, ou digite o comprimento e Enter (ex.: 300 ou @300,0). As paredes encadeiam-se; Esc termina.',
   'data-tool=door':'Porta (D): defina largura e altura e clique numa parede. Arraste para mover; no painel escolha o sentido e a dobradiça.',
+  'data-tool=passage':'Passagem (G): vão aberto sem porta nem contraverga; a verga e as colunas laterais continuam a ser necessárias. Clique na parede.','data-tool=cut':'Cortar parede: divide uma parede em dois trechos no ponto clicado, para apagar um deles ou mover separadamente.',
   'data-tool=window':'Janela (J): defina largura, altura e peitoril e clique numa parede. Arraste para mover.',
   'data-tool=furniture':'Mobiliário: arraste um retângulo e dê um nome (cama, mesa, bancada…).',
   'data-tool=room':'Ambientes (A): arraste um retângulo para nomear o cômodo e calcular a área.',
