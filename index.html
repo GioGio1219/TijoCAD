@@ -378,6 +378,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
       <button class="tb svc" data-svc="hid" style="--c:#2f7fc1"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/></svg>Hidráulica</button>
       <button class="tb svc" data-svc="esg" style="--c:#8d6a4a"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M8 6v6a4 4 0 0 0 8 0V6M12 16v5"/></svg>Esgoto</button>
       <button class="tb svc" data-svc="gas" style="--c:#e07b39"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3c1 4 5 6 5 11a5 5 0 0 1-10 0c0-3 2-4 2-7 2 1 3 2 3-4z"/></svg>Gás</button>
+      <button class="tb box" id="svcRoute" data-tip="Propõe o traçado da rede escolhida ligando todos os pontos pelas paredes: árvore mínima (menos material) ou estrela a partir da origem. Duplo clique num ponto define a origem (quadro, entrada de água)."><svg class="ic" viewBox="0 0 24 24"><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 19h10M19 7v10M7 18l10-11"/></svg>Propor caminhos</button>
       <button class="tb" data-svc="riser" data-tip="Prumada: clique num furo e indique de que fiada a que fiada o tubo/conduíte sobe. Visível na planta por fiada e nas Fiadas."><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/></svg>Prumada</button>
       <button class="tb" data-svc="erase"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M6 7l1 13h10l1-13"/></svg>Apagar</button>
     </div>
@@ -416,7 +417,7 @@ canvas#plan{touch-action:none;cursor:crosshair}
     <span class="sp"></span>
     <span id="stCursor">x 0 · y 0</span>
     <span id="stInfo"></span>
-    <span style="color:var(--ink3)" title="Versão do ficheiro">v18</span>
+    <span style="color:var(--ink3)" title="Versão do ficheiro">v19</span>
   </div>
 
   <div class="menu" id="toolsMenu">
@@ -739,12 +740,42 @@ function drawServices(f){
   for(const c of f.conduits){ const a=svcById(c.a),b=svcById(c.b); if(!a||!b)continue; if(curCourse!=null&&a.c!=null&&a.c!==curCourse&&b.c!==curCourse)continue; const [ax,ay]=toScr(a.x,a.y),[bx,by]=toScr(b.x,b.y); ctx.strokeStyle=SVC[c.type].c; ctx.lineWidth=3; ctx.setLineDash(c.type==='ele'?[6,4]:[]); ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); }
   ctx.setLineDash([]);
   if(drag&&drag.kind==='conduit'){ const a=svcById(drag.from); const [ax,ay]=toScr(a.x,a.y),[bx,by]=toScr(drag.x,drag.y); ctx.strokeStyle=SVC[drag.type].c; ctx.globalAlpha=.6; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); ctx.globalAlpha=1; }
-  for(const p of f.services){ if(curCourse!=null&&p.c!=null&&p.c!==curCourse)continue; const [sx,sy]=toScr(p.x,p.y); const d=SVC[p.type]; ctx.fillStyle='#fff'; ctx.strokeStyle=d.c; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(sx,sy,8,0,7); ctx.fill(); ctx.stroke(); ctx.fillStyle=d.c; ctx.font='bold 10px Inter'; ctx.textAlign='center'; ctx.fillText(d.l,sx,sy+3.5); if(p.h!=null){ ctx.fillStyle=css('--ink2'); ctx.font='9px Inter'; ctx.fillText('h '+fmt(p.h)+(p.c!=null?' · f'+(p.c+1):''),sx,sy+20); } }
+  for(const p of f.services){ if(curCourse!=null&&p.c!=null&&p.c!==curCourse)continue; const [sx,sy]=toScr(p.x,p.y); const d=SVC[p.type]; if(p.node){ ctx.fillStyle=d.c; ctx.beginPath(); ctx.arc(sx,sy,3.5,0,7); ctx.fill(); continue; } if(p.origin){ ctx.strokeStyle=d.c; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(sx,sy,12,0,7); ctx.stroke(); } ctx.fillStyle='#fff'; ctx.strokeStyle=d.c; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(sx,sy,8,0,7); ctx.fill(); ctx.stroke(); ctx.fillStyle=d.c; ctx.font='bold 10px Inter'; ctx.textAlign='center'; ctx.fillText(d.l,sx,sy+3.5); if(p.h!=null){ ctx.fillStyle=css('--ink2'); ctx.font='9px Inter'; ctx.fillText('h '+fmt(p.h)+(p.c!=null?' · f'+(p.c+1):''),sx,sy+20); } }
   // prumadas (visíveis na planta geral como marca no furo)
   if(curCourse==null)for(const r of (f.risers||[])){ const w=wallById(r.wall); if(!w)continue; const [dx,dy]=wallDir(w),[nx,ny]=wallNormal(w),T=S.settings.wallT; const [sx,sy]=toScr(w.x1+dx*(r.k*T+T/2)+nx*T/2,w.y1+dy*(r.k*T+T/2)+ny*T/2); ctx.strokeStyle=SVC[r.type].c; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(sx,sy,5,0,7); ctx.stroke(); ctx.fillStyle=SVC[r.type].c; ctx.font='bold 8px Inter'; ctx.textAlign='center'; ctx.fillText('↕',sx,sy+3); }
   ctx.restore();
 }
-function svcSummary(f){ const out={}; for(const k in SVC)out[k]={pts:0,len:0,vert:0}; for(const p of f.services)out[p.type].pts++; for(const c of f.conduits){ const a=svcById(c.a),b=svcById(c.b); if(a&&b)out[c.type].len+=Math.hypot(b.x-a.x,b.y-a.y)/100; } for(const r of (f.risers||[]))out[r.type].vert+=(Math.abs(r.c1-r.c0)+1)*S.settings.course/100; return out; }
+/* grafo das paredes para traçar instalações: nós = pontas, encontros e pontos da rede; arestas ao longo das paredes */
+function wallGraph(type){ const f=F(),T=S.settings.wallT; const nodes=[]; const key=(x,y)=>{ for(let i=0;i<nodes.length;i++){ if(Math.hypot(nodes[i].x-x,nodes[i].y-y)<=T*1.6)return i; } nodes.push({x,y,adj:[]}); return nodes.length-1; };
+  const addEdge=(i,j)=>{ if(i===j)return; const d=Math.hypot(nodes[i].x-nodes[j].x,nodes[i].y-nodes[j].y); nodes[i].adj.push([j,d]); nodes[j].adj.push([i,d]); };
+  const pts=f.services.filter(p=>p.type===type&&!p.node); const pnode=new Map();
+  for(const w of f.walls){ const [dx,dy]=wallDir(w),[nx,ny]=wallNormal(w),L=wallLen(w); const onW=[{t:0},{t:L}];
+    for(const o of f.walls){ if(o===w)continue; for(const [px,py] of [[o.x1,o.y1],[o.x2,o.y2]]){ const t=(px-w.x1)*dx+(py-w.y1)*dy; const pd=Math.abs(-(px-w.x1)*dy+(py-w.y1)*dx); if(t>T&&t<L-T&&pd<=T*1.6)onW.push({t}); } }
+    for(const p of pts){ const t=(p.x-w.x1)*dx+(p.y-w.y1)*dy; const pd=Math.abs(-(p.x-w.x1)*dy+(p.y-w.y1)*dx); if(t>=-1&&t<=L+1&&pd<=T*1.6&&!pnode.has(p.id))onW.push({t,p}); }
+    onW.sort((a,b)=>a.t-b.t); let prev=null; for(const n of onW){ const x=w.x1+dx*n.t+nx*T/2, y=w.y1+dy*n.t+ny*T/2; const i=n.p?key(n.p.x,n.p.y):key(x,y); if(n.p)pnode.set(n.p.id,i); if(prev!=null)addEdge(prev,i); prev=i; } }
+  return {nodes,pts,pnode}; }
+function dijkstra(nodes,src){ const dist=nodes.map(()=>Infinity),prev=nodes.map(()=>-1),done=nodes.map(()=>false); dist[src]=0; for(let it=0;it<nodes.length;it++){ let u=-1; for(let i=0;i<nodes.length;i++)if(!done[i]&&(u<0||dist[i]<dist[u]))u=i; if(u<0||dist[u]===Infinity)break; done[u]=true; for(const [v,d] of nodes[u].adj)if(dist[u]+d<dist[v]){dist[v]=dist[u]+d;prev[v]=u;} } return {dist,prev}; }
+const pathOf=(prev,t)=>{ const out=[]; for(let v=t;v>=0;v=prev[v])out.unshift(v); return out; };
+function autoRoute(type){ const f=F(); const g=wallGraph(type); const P=g.pts.filter(p=>g.pnode.has(p.id)); if(P.length<2){ toast('Coloque pelo menos dois pontos da rede '+SVC[type].n+' sobre paredes.'); return; }
+  if(P.length<g.pts.length)toast((g.pts.length-P.length)+' ponto(s) fora das paredes foram ignorados.');
+  const idx=P.map(p=>g.pnode.get(p.id)); const D=idx.map(i=>dijkstra(g.nodes,i));
+  // árvore mínima (Prim) sobre os pontos, com caminhos reais pelas paredes
+  const inT=[0], edgesT=[]; let lenT=0; while(inT.length<P.length){ let best=null; for(const a of inT)for(let b=0;b<P.length;b++){ if(inT.includes(b))continue; const d=D[a].dist[idx[b]]; if(d<Infinity&&(!best||d<best.d))best={a,b,d}; } if(!best){ toast('Alguns pontos não estão ligados por paredes.'); break; } inT.push(best.b); edgesT.push(best); lenT+=best.d; }
+  // estrela a partir da origem
+  let oi=P.findIndex(p=>p.origin); if(oi<0)oi=0; const edgesS=[]; let lenS=0; for(let b=0;b<P.length;b++){ if(b===oi)continue; const d=D[oi].dist[idx[b]]; if(d<Infinity){ edgesS.push({a:oi,b,d}); lenS+=d; } }
+  const cur=svcSummary(f)[type].len*100;
+  modal(`<h3>Propor caminhos · ${SVC[type].n}</h3><p class="lead">${P.length} pontos ligados pelas paredes (os trechos passam pelos canais das fiadas e pelos furos). Origem: ${P[oi].origin?'ponto marcado':'primeiro ponto colocado (duplo clique num ponto para mudar)'}.</p>
+  <div class="kpis"><div class="kpi"><b>${fmt(lenT/100,1)} m</b><span>árvore mínima · menos material, ramais partilhados</span></div><div class="kpi"><b>${fmt(lenS/100,1)} m</b><span>estrela · um ramal por ponto, circuitos independentes</span></div><div class="kpi"><b>${fmt(cur/100,1)} m</b><span>traçado atual</span></div></div>
+  <p style="color:var(--ink2);font-size:14px">Aplicar substitui os trechos horizontais atuais desta rede. As prumadas e os pontos ficam.</p>
+  <div class="foot"><button class="btn ghost" data-close>Cancelar</button><button class="btn ghost" id="rtStar">Aplicar estrela</button><button class="btn primary" id="rtTree">Aplicar árvore mínima</button></div>`);
+  const apply=(edges)=>{ pushHistory(); f.conduits=f.conduits.filter(c=>c.type!==type); f.services=f.services.filter(p=>!(p.node&&p.type===type));
+    const nodePt=new Map(); P.forEach((p,i)=>nodePt.set(idx[i],p.id));
+    const getPt=(ni)=>{ if(nodePt.has(ni))return nodePt.get(ni); const n=g.nodes[ni]; const q={id:uid(),type,x:n.x,y:n.y,node:true,c:null}; f.services.push(q); nodePt.set(ni,q.id); return q.id; };
+    const seen=new Set(); for(const e of edges){ const path=pathOf(D[e.a].prev,idx[e.b]); for(let i=0;i<path.length-1;i++){ const a=getPt(path[i]),b=getPt(path[i+1]); const k=a<b?a+'-'+b:b+'-'+a; if(seen.has(k))continue; seen.add(k); f.conduits.push({id:uid(),type,a,b}); } }
+    closeModal(); draw(); toast('Traçado aplicado: '+fmt(svcSummary(f)[type].len,1)+' m de '+SVC[type].n.toLowerCase()+'.'); };
+  $('#rtTree').onclick=()=>apply(edgesT); $('#rtStar').onclick=()=>apply(edgesS); }
+$('#svcRoute').addEventListener('click',()=>{ const t=SVC[svcTool]?svcTool:'ele'; autoRoute(t); });
+function svcSummary(f){ const out={}; for(const k in SVC)out[k]={pts:0,len:0,vert:0}; for(const p of f.services)if(!p.node)out[p.type].pts++; for(const c of f.conduits){ const a=svcById(c.a),b=svcById(c.b); if(a&&b)out[c.type].len+=Math.hypot(b.x-a.x,b.y-a.y)/100; } for(const r of (f.risers||[]))out[r.type].vert+=(Math.abs(r.c1-r.c0)+1)*S.settings.course/100; return out; }
 /* prumadas: tubo/conduíte vertical num furo, entre duas fiadas */
 function riserAt(wallId,k,c){ return (F().risers||[]).find(r=>r.wall===wallId&&r.k===k&&c>=Math.min(r.c0,r.c1)&&c<=Math.max(r.c0,r.c1)); }
 function holeAt(x,y){ const nw=nearestWall(x,y,S.settings.wallT); if(!nw)return null; const T=S.settings.wallT; const k=Math.max(0,Math.min(Math.round(wallLen(nw.w)/T)-1,Math.floor(nw.t/T))); return {w:nw.w,k}; }
@@ -776,6 +807,7 @@ cv.addEventListener('pointerdown',e=>{
       pushHistory(); F().risers=F().risers||[]; F().risers.push({id:uid(),type,wall:hole.w.id,k:hole.k,c0:Math.max(0,+c0-1),c1:Math.max(0,+c1-1)}); toast('Prumada criada no furo '+(hole.k+1)+' da parede, fiadas '+c0+' a '+c1+'.'); draw(); return; }
     if(svcTool==='erase'){ const p=svcHit(x,y); if(p){ pushHistory(); F().services=F().services.filter(q=>q!==p); F().conduits=F().conduits.filter(c=>c.a!==p.id&&c.b!==p.id); draw(); return; } const c=conduitHit(x,y); if(c){ pushHistory(); F().conduits=F().conduits.filter(q=>q!==c); draw(); } return; }
     const p=svcHit(x,y);
+    if(p&&e.detail===2){ pushHistory(); const was=p.origin; for(const q of F().services)if(q.type===p.type)q.origin=false; p.origin=!was; toast(p.origin?'Origem da rede '+SVC[p.type].n+' definida aqui (quadro / entrada).':'Origem removida.'); draw(); return; }
     if(p){ drag={kind:'conduit',from:p.id,type:svcTool,x:p.x,y:p.y}; return; }
     const nw=nearestWall(x,y,S.settings.wallT*1.5); let px=sx,py=sy; if(nw){ const [dx,dy]=wallDir(nw.w),[nx,ny]=wallNormal(nw.w),hT=S.settings.wallT/2; const t=Math.floor(nw.t/S.settings.wallT)*S.settings.wallT+hT; px=nw.w.x1+dx*t+nx*hT; py=nw.w.y1+dy*t+ny*hT; }
     const hole=holeAt(x,y); if(curCourse!=null){ // na planta por fiada o ponto fica na fiada atual
@@ -944,6 +976,8 @@ addEventListener('keydown',e=>{
   if(e.key==='PageUp'){e.preventDefault();setCourse(curCourse==null?0:curCourse+1);} if(e.key==='PageDown'){e.preventDefault();setCourse(curCourse==null?0:curCourse-1);}
   if(sel&&sel.type==='opening'&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){ e.preventDefault(); const o=sel.obj,w=wallById(o.wall); pushHistory(); o.off=Math.max(0,Math.min(wallLen(w)-o.width,o.off+(e.key==='ArrowRight'?1:-1)*S.settings.wallT)); draw(); showPanel(); }
   if(e.key==='r'&&tool==='furniture'){furnRot=!furnRot;draw();}
+  if(sel&&['furniture','room','text','column'].includes(sel.type)&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){ e.preventDefault(); const o=sel.obj,T=S.settings.wallT; pushHistory(); if(e.key==='ArrowLeft')o.x-=T; if(e.key==='ArrowRight')o.x+=T; if(e.key==='ArrowUp')o.y-=T; if(e.key==='ArrowDown')o.y+=T; draw(); showPanel(); return; }
+  if(e.key==='f'&&sel&&sel.type==='opening'&&sel.obj.type==='door'){ pushHistory(); sel.obj.swing=-(sel.obj.swing||1); draw(); showPanel(); return; }
   if(!(sel&&sel.type==='opening')&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){ e.preventDefault(); const st=60/cam.z; if(e.key==='ArrowLeft')cam.x-=st; if(e.key==='ArrowRight')cam.x+=st; if(e.key==='ArrowUp')cam.y-=st; if(e.key==='ArrowDown')cam.y+=st; draw(); }
   if(e.key==='+'||e.key==='='){ cam.z=Math.min(8,cam.z*1.2); draw(); } if(e.key==='-'){ cam.z=Math.max(.15,cam.z/1.2); draw(); } if(e.key==='0'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); fit(); }
   const keys={p:'wall',d:'door',j:'window',g:'passage',s:'select',m:'measure',t:'text',a:'room',h:'pan'}; if(!e.ctrlKey&&!e.metaKey&&keys[e.key])setTool(keys[e.key]);
@@ -970,7 +1004,7 @@ function setView(v){ view=v; $$('#views .tb').forEach(b=>b.classList.toggle('on'
   $('#ctx3d').classList.toggle('hidden',v!=='3d'); $('#ctxServ').classList.toggle('hidden',v!=='services'); $('#ctxCourse').classList.toggle('hidden',v!=='course'); $('#ctxElev').classList.toggle('hidden',v!=='elev');
   if(v==='3d')start3d(); else stop3d();
   if(v==='course')renderCourses(); if(v==='sheet')renderSheet(); if(v==='elev')renderElevation();
-  if(v==='services'){ setSvc(svcTool); $('#hint').innerHTML='Instalações: escolha a fiada no seletor (ou "Todas") · clique num furo para colocar um ponto da rede nessa altura · arraste de um ponto a outro para o trecho horizontal · Prumada marca o furo por onde o tubo sobe entre fiadas.'; }
+  if(v==='services'){ setSvc(svcTool); $('#hint').innerHTML='Instalações: clique num furo para colocar um ponto da rede (na fiada escolhida ou pela altura) · arraste de um ponto a outro para o trecho horizontal · Prumada marca o furo por onde o tubo sobe · duplo clique num ponto define a origem · Propor caminhos traça a rede toda pelas paredes.'; }
   draw(); }
 function setSvc(t){ svcTool=t; $$('#ctxServ .tb').forEach(b=>b.classList.toggle('on',b.dataset.svc===t)); }
 $$('#ctxServ .tb').forEach(b=>b.addEventListener('click',()=>setSvc(b.dataset.svc)));
@@ -1451,7 +1485,7 @@ const TIPS={
   'data-tool=furniture':'Mobiliário: arraste um retângulo e dê um nome (cama, mesa, bancada…).',
   'data-tool=room':'Ambientes (A): arraste um retângulo para nomear o cômodo e calcular a área.',
   'data-tool=pan':'Mão (H): arraste para deslocar a planta. Rolar desloca; Ctrl/Cmd + rolar ou pinça faz zoom; + e − também; Ctrl+0 enquadra.',
-  'data-tool=select':'Selecionar (S): clique num elemento para editar as propriedades; arraste para mover; Delete apaga.',
+  'data-tool=select':'Selecionar (S): clique num elemento para editar as propriedades; arraste ou use as setas para mover; Delete apaga; F inverte o sentido de uma porta.',
   'data-tool=measure':'Medir (M): arraste entre dois pontos para ler a distância.',
   'data-tool=text':'Texto (T): clique para escrever uma anotação na planta.',
   'data-tool=column':'Coluna de graute extra: marca um furo a grautear fora das posições automáticas.',
